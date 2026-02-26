@@ -369,16 +369,26 @@ with tab2:
             default=[n for n in assigned_active if n in avail_map],
             key=f"ms_{work_date_str}_{shift_id}"
         )
-        with st.expander("🛠️ Editar disponibilidad SOLO para este día (override)", expanded=False):
+with st.expander("🛠️ Editar disponibilidad SOLO para este día (override)", expanded=False):
     st.caption("Esto NO cambia la disponibilidad semanal. Solo afecta a este día y este turno.")
+
     df_eff = get_effective_availability_all(date.fromisoformat(work_date_str), dow, shift_id)
 
-    reason = st.text_input("Motivo (opcional)", value="", key=f"ov_reason_{work_date_str}_{shift_id}")
+    reason = st.text_input(
+        "Motivo (opcional)",
+        value="",
+        key=f"ov_reason_{work_date_str}_{shift_id}"
+    )
 
     for r in df_eff.itertuples(index=False):
         # Si está de vacaciones, lo dejamos bloqueado
         if r.is_time_off:
-            st.checkbox(f"{r.full_name} (vacaciones)", value=False, key=f"ov_{r.id}_{work_date_str}_{shift_id}", disabled=True)
+            st.checkbox(
+                f"{r.full_name} (vacaciones)",
+                value=False,
+                key=f"ov_{r.id}_{work_date_str}_{shift_id}",
+                disabled=True
+            )
             continue
 
         new_av = st.checkbox(
@@ -449,5 +459,6 @@ with tab3:
 
     st.markdown("### Detalle")
     st.dataframe(df[["work_date","turno","full_name","hours"]], use_container_width=True, hide_index=True)
+
 
 
