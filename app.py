@@ -370,23 +370,26 @@ with tab2:
             key=f"ms_{work_date_str}_{shift_id}"
         )
 with st.expander("🛠️ Editar disponibilidad SOLO para este día (override)", expanded=False):
+    work_date = date.fromisoformat(st.session_state["selected_work_date"])
+    shift_id_local = st.session_state["selected_shift_id"]
+    dow = int(work_date.isoweekday())
+
     st.caption("Esto NO cambia la disponibilidad semanal. Solo afecta a este día y este turno.")
 
-    df_eff = get_effective_availability_all(date.fromisoformat(work_date_str), dow, shift_id)
+    df_eff = get_effective_availability_all(work_date, dow, shift_id_local)
 
     reason = st.text_input(
         "Motivo (opcional)",
         value="",
-        key=f"ov_reason_{work_date_str}_{shift_id}"
+        key=f"ov_reason_{work_date.isoformat()}_{shift_id_local}"
     )
 
     for r in df_eff.itertuples(index=False):
-        # Si está de vacaciones, lo dejamos bloqueado
         if r.is_time_off:
             st.checkbox(
                 f"{r.full_name} (vacaciones)",
                 value=False,
-                key=f"ov_{r.id}_{work_date_str}_{shift_id}",
+                key=f"ov_{r.id}_{work_date.isoformat()}_{shift_id_local}",
                 disabled=True
             )
             continue
@@ -394,14 +397,14 @@ with st.expander("🛠️ Editar disponibilidad SOLO para este día (override)",
         new_av = st.checkbox(
             r.full_name,
             value=bool(r.is_available),
-            key=f"ov_{r.id}_{work_date_str}_{shift_id}"
+            key=f"ov_{r.id}_{work_date.isoformat()}_{shift_id_local}"
         )
 
         if new_av != bool(r.is_available):
             upsert_override(
                 emp_id=str(r.id),
-                work_date=date.fromisoformat(work_date_str),
-                shift_id=shift_id,
+                work_date=work_date,
+                shift_id=shift_id_local,
                 available=new_av,
                 reason=reason
             )
@@ -459,6 +462,7 @@ with tab3:
 
     st.markdown("### Detalle")
     st.dataframe(df[["work_date","turno","full_name","hours"]], use_container_width=True, hide_index=True)
+
 
 
 
