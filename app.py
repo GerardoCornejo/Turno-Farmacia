@@ -369,6 +369,9 @@ with tab2:
             default=[n for n in assigned_active if n in avail_map],
             key=f"ms_{work_date_str}_{shift_id}"
         )
+if "selected_work_date" not in st.session_state or "selected_shift_id" not in st.session_state:
+    st.info("Haz clic en un bloque (Mañana/Tarde) del calendario para editarlo.")
+    st.stop()
 with st.expander("🛠️ Editar disponibilidad SOLO para este día (override)", expanded=False):
     work_date = date.fromisoformat(st.session_state["selected_work_date"])
     shift_id_local = st.session_state["selected_shift_id"]
@@ -462,6 +465,7 @@ with tab3:
 
     st.markdown("### Detalle")
     st.dataframe(df[["work_date","turno","full_name","hours"]], use_container_width=True, hide_index=True)
+
 
 
 
