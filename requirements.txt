@@ -1,6 +1,7 @@
-streamlit
+streamlit==1.41.1
+streamlit-calendar==1.4.0
 pandas
 sqlalchemy
 psycopg2-binary
 python-dateutil
-streamlit-calendar
+
