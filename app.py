@@ -311,20 +311,7 @@ with tab2:
         "firstDay": 1,  # lunes
         "dayMaxEvents": True,
     }
-    options = {
-        "initialView": "dayGridMonth",
-        "headerToolbar": {"left": "prev,next today", "center": "title", "right": "dayGridMonth,listMonth"},
-        "height": 750,
-        "firstDay": 1,
-        "dayMaxEvents": True,
-        "eventDidMount": """
-            function(info) {
-              if (info.event.extendedProps && info.event.extendedProps.tooltip) {
-            info.el.title = info.event.extendedProps.tooltip; // tooltip nativo
-          }
-        }
-    """
-}
+   
     # Render calendario
     cal_state = calendar(events=events, options=options, key="fullcalendar")
 
@@ -465,6 +452,7 @@ with tab3:
 
     st.markdown("### Detalle")
     st.dataframe(df[["work_date","turno","full_name","hours"]], use_container_width=True, hide_index=True)
+
 
 
 
