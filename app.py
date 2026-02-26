@@ -258,9 +258,10 @@ with tab2:
                     # selección de asignaciones activas
                     default = [n for n in assigned_active if n in avail_map]  # por si alguien fue desactivado o ya no es disponible
                     selected = st.multiselect(
-                        "Asignar personas (esto deja esas asignaciones ACTIVAS)",
-                        options=avail_names,
-                        default=default
+                    "Asignar personas (esto deja esas asignaciones ACTIVAS)",
+                    options=avail_names,
+                    default=default,
+                    key=f"ms_{d.isoformat()}_{sh.id}"
                     )
 
                     if st.button(f"💾 Guardar asignación ({d} - {sh.name})", key=f"save_{d}_{sh.id}"):
@@ -327,3 +328,4 @@ with tab3:
 
     st.markdown("### Detalle")
     st.dataframe(df[["work_date","turno","full_name","hours"]], use_container_width=True, hide_index=True)
+
