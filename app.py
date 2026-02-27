@@ -326,97 +326,111 @@ with tab2:
         st.session_state["selected_work_date"] = work_date_str
         st.session_state["selected_shift_id"] = shift_id
 
-    # Panel de edición (sale debajo del calendario)
-    if "selected_work_date" in st.session_state and "selected_shift_id" in st.session_state:
-        work_date_str = st.session_state["selected_work_date"]
-        shift_id = st.session_state["selected_shift_id"]
+    # PANEL: solo si hay selección
+if "selected_work_date" in st.session_state and "selected_shift_id" in st.session_state:
+    work_date_str = st.session_state["selected_work_date"]
+    shift_id = st.session_state["selected_shift_id"]
 
-        match = shifts[shifts["id"].astype(str) == str(shift_id)]
-        if match.empty:
-            st.error("No he podido identificar el turno (shift_id) recibido del calendario.")
-            st.write("shift_id recibido:", shift_id)
-            st.write("Turnos disponibles (id, name):")
-            st.dataframe(shifts[["id","name","code"]], use_container_width=True, hide_index=True)
+    work_date = date.fromisoformat(work_date_str)
+    dow = int(work_date.isoweekday())
+
+    match = shifts[shifts["id"].astype(str) == str(shift_id)]
+    if match.empty:
+        st.error("No he podido identificar el turno (shift_id) recibido del calendario.")
+        st.write("shift_id recibido:", shift_id)
+        st.write("Turnos disponibles (id, name, code):")
+        st.dataframe(shifts[["id", "name", "code"]], use_container_width=True, hide_index=True)
         st.stop()
 
     sh_row = match.iloc[0]
     req = int(sh_row["required_staff"])
-    dow = int(date.fromisoformat(work_date_str).isoweekday())
 
     st.divider()
     st.markdown(f"### Editar {work_date_str} · **{sh_row['name']}** (necesarias: {req})")
 
-        # disponibles según tu lógica (semanal + overrides + vacaciones)
-        avail = available_employees_for_date_shift(date.fromisoformat(work_date_str), dow, shift_id)
-        if avail.empty:
-            st.warning("Nadie disponible según disponibilidad/vacaciones.")
-            st.stop()
+    # Disponibles según semanal + overrides + vacaciones
+    avail = available_employees_for_date_shift(work_date, dow, str(shift_id))
+    if avail.empty:
+        st.warning("Nadie disponible según disponibilidad/vacaciones.")
+        st.stop()
 
-        avail_names = avail["full_name"].tolist()
-        avail_map = dict(zip(avail_names, avail["id"].tolist()))
+    avail_names = avail["full_name"].tolist()
+    avail_map = dict(zip(avail_names, avail["id"].tolist()))
 
-        assigned = get_assignments(date.fromisoformat(work_date_str), shift_id)
-        assigned_active = assigned[assigned["active"] == True]["full_name"].tolist() if not assigned.empty else []
+    assigned = get_assignments(work_date, str(shift_id))
+    assigned_active = assigned[assigned["active"] == True]["full_name"].tolist() if not assigned.empty else []
 
-        selected = st.multiselect(
-            "Personas asignadas (quedarán ACTIVAS)",
-            options=avail_names,
-            default=[n for n in assigned_active if n in avail_map],
-            key=f"ms_{work_date_str}_{shift_id}"
-        )
-if "selected_work_date" not in st.session_state or "selected_shift_id" not in st.session_state:
-    st.info("Haz clic en un bloque (Mañana/Tarde) del calendario para editarlo.")
-    st.stop()
-with st.expander("🛠️ Editar disponibilidad SOLO para este día (override)", expanded=False):
-    work_date = date.fromisoformat(st.session_state["selected_work_date"])
-    shift_id_local = st.session_state["selected_shift_id"]
-    dow = int(work_date.isoweekday())
-
-    st.caption("Esto NO cambia la disponibilidad semanal. Solo afecta a este día y este turno.")
-
-    df_eff = get_effective_availability_all(work_date, dow, shift_id_local)
-
-    reason = st.text_input(
-        "Motivo (opcional)",
-        value="",
-        key=f"ov_reason_{work_date.isoformat()}_{shift_id_local}"
+    selected = st.multiselect(
+        "Personas asignadas (quedarán ACTIVAS)",
+        options=avail_names,
+        default=[n for n in assigned_active if n in avail_map],
+        key=f"ms_{work_date_str}_{shift_id}"
     )
 
-    for r in df_eff.itertuples(index=False):
-        if r.is_time_off:
-            st.checkbox(
-                f"{r.full_name} (vacaciones)",
-                value=False,
-                key=f"ov_{r.id}_{work_date.isoformat()}_{shift_id_local}",
-                disabled=True
-            )
-            continue
+    c1, c2 = st.columns([1, 2])
+    with c1:
+        if st.button("💾 Guardar asignación", type="primary", key=f"save_{work_date_str}_{shift_id}"):
+            selected_ids = [avail_map[n] for n in selected]
+            apply_assignments(work_date, dow, str(shift_id), selected_ids)
+            st.success("Guardado.")
+            st.rerun()
+    with c2:
+        st.caption("Puedes activar/desactivar asignaciones una a una más abajo.")
 
-        new_av = st.checkbox(
-            r.full_name,
-            value=bool(r.is_available),
-            key=f"ov_{r.id}_{work_date.isoformat()}_{shift_id_local}"
+    st.divider()
+    st.write("Asignaciones existentes (activar/desactivar):")
+    if assigned.empty:
+        st.info("No hay asignaciones todavía.")
+    else:
+        for r in assigned.itertuples(index=False):
+            k = f"act_{r.assignment_id}"
+            new_act = st.checkbox(r.full_name, value=bool(r.active), key=k)
+            if new_act != bool(r.active):
+                set_assignment_active(r.assignment_id, new_act)
+                st.toast("Actualizado ✅")
+                st.rerun()
+
+    # Overrides (disponibilidad puntual)
+    with st.expander("🛠️ Editar disponibilidad SOLO para este día (override)", expanded=False):
+        st.caption("Esto NO cambia la disponibilidad semanal. Solo afecta a este día y este turno.")
+
+        df_eff = get_effective_availability_all(work_date, dow, str(shift_id))
+
+        reason = st.text_input(
+            "Motivo (opcional)",
+            value="",
+            key=f"ov_reason_{work_date_str}_{shift_id}"
         )
 
-        if new_av != bool(r.is_available):
-            upsert_override(
-                emp_id=str(r.id),
-                work_date=work_date,
-                shift_id=shift_id_local,
-                available=new_av,
-                reason=reason
+        for r in df_eff.itertuples(index=False):
+            if r.is_time_off:
+                st.checkbox(
+                    f"{r.full_name} (vacaciones)",
+                    value=False,
+                    key=f"ov_{r.id}_{work_date_str}_{shift_id}",
+                    disabled=True
+                )
+                continue
+
+            new_av = st.checkbox(
+                r.full_name,
+                value=bool(r.is_available),
+                key=f"ov_{r.id}_{work_date_str}_{shift_id}"
             )
-            st.toast("Override guardado ✅")
-            st.rerun()
-        c1, c2 = st.columns([1, 2])
-        with c1:
-            if st.button("💾 Guardar asignación", type="primary", key=f"save_{work_date_str}_{shift_id}"):
-                selected_ids = [avail_map[n] for n in selected]
-                apply_assignments(date.fromisoformat(work_date_str), dow, shift_id, selected_ids)
-                st.success("Guardado.")
+
+            if new_av != bool(r.is_available):
+                upsert_override(
+                    emp_id=str(r.id),
+                    work_date=work_date,
+                    shift_id=str(shift_id),
+                    available=new_av,
+                    reason=reason
+                )
+                st.toast("Override guardado ✅")
                 st.rerun()
-        with c2:
-            st.caption("Consejo: si quieres “bloquear” a alguien un día concreto, lo haremos con overrides (te lo añado luego como botón).")
+
+else:
+    st.info("Haz clic en un bloque (Mañana/Tarde) del calendario para editarlo.")
 # ===================== TAB 3: DASHBOARD =====================
 with tab3:
     st.subheader("Dashboard mensual (horas reales por persona)")
@@ -460,6 +474,7 @@ with tab3:
 
     st.markdown("### Detalle")
     st.dataframe(df[["work_date","turno","full_name","hours"]], use_container_width=True, hide_index=True)
+
 
 
 
