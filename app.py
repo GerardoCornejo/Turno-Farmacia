@@ -470,6 +470,10 @@ if "selected_work_date" in st.session_state and "selected_shift_id" in st.sessio
             )
 
             if new_av != bool(r.is_available):
+                if closed:
+                    st.warning("Mes cerrado: no se puede editar.")
+                    st.stop()
+                
                 upsert_override(
                     emp_id=str(r.id),
                     work_date=work_date,
@@ -525,6 +529,7 @@ with tab3:
 
     st.markdown("### Detalle")
     st.dataframe(df[["work_date","turno","full_name","hours"]], use_container_width=True, hide_index=True)
+
 
 
 
