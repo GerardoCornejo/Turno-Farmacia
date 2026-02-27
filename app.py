@@ -340,7 +340,7 @@ with tab2:
         st.stop()
 
     sh_row = match.iloc[0]
-        req = int(sh_row["required_staff"])
+    req = int(sh_row["required_staff"])
         dow = int(date.fromisoformat(work_date_str).isoweekday())
 
         st.divider()
@@ -460,6 +460,7 @@ with tab3:
 
     st.markdown("### Detalle")
     st.dataframe(df[["work_date","turno","full_name","hours"]], use_container_width=True, hide_index=True)
+
 
 
 
