@@ -488,12 +488,24 @@ else:
     st.info("Haz clic en un bloque (Mañana/Tarde) del calendario para editarlo.")
 # ===================== TAB 3: DASHBOARD =====================
 with tab3:
-    st.subheader("Dashboard mensual (horas reales por persona)")
-    st.caption("Cuenta horas según asignaciones ACTIVAS del calendario.")
+    st.subheader("Dashboard (horas reales por persona)")
+    st.caption("Cuenta horas según asignaciones ACTIVAS en el rango de fechas elegido.")
 
-    pick = st.date_input("Mes a analizar", value=date.today(), key="dash_month")
-    start, end = month_range(pick)
+    # Ventana de fechas
+    c1, c2, c3 = st.columns([1, 1, 2])
+    with c1:
+        start_date = st.date_input("Inicio", value=date.today().replace(day=1), key="dash_start")
+    with c2:
+        end_date = st.date_input("Fin", value=date.today(), key="dash_end")
+    with c3:
+        st.info("El rango incluye Inicio y Fin.")
 
+    # Validación sencilla
+    if end_date < start_date:
+        st.error("La fecha 'Fin' no puede ser anterior a 'Inicio'.")
+        st.stop()
+
+    # Traer asignaciones activas en el rango (inclusive)
     df = read_df("""
         select
           e.full_name,
@@ -505,16 +517,16 @@ with tab3:
         join employees e on e.id = a.employee_id
         join shift_types st on st.id = a.shift_type_id
         where a.active=true
-          and a.work_date >= :s and a.work_date < :e
+          and a.work_date >= :s
+          and a.work_date <= :e
         order by e.full_name, a.work_date, st.start_time
-    """, {"s": str(start), "e": str(end)})
+    """, {"s": str(start_date), "e": str(end_date)})
 
     if df.empty:
-        st.info("No hay asignaciones activas en ese mes.")
+        st.info("No hay asignaciones activas en ese rango.")
         st.stop()
 
-    # calcular horas del turno
-    # (end_time - start_time) en horas. Asumimos turnos dentro del día (no nocturnos).
+    # Calcular horas del turno (end - start)
     df["start_time"] = pd.to_datetime(df["start_time"].astype(str))
     df["end_time"] = pd.to_datetime(df["end_time"].astype(str))
     df["hours"] = (df["end_time"] - df["start_time"]).dt.total_seconds() / 3600.0
@@ -528,8 +540,7 @@ with tab3:
     st.dataframe(resumen, use_container_width=True, hide_index=True)
 
     st.markdown("### Detalle")
-    st.dataframe(df[["work_date","turno","full_name","hours"]], use_container_width=True, hide_index=True)
-
+    st.dataframe(df[["work_date", "turno", "full_name", "hours"]], use_container_width=True, hide_index=True)
 
 
 
