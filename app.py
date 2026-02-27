@@ -343,8 +343,8 @@ with tab2:
     req = int(sh_row["required_staff"])
     dow = int(date.fromisoformat(work_date_str).isoweekday())
 
-        st.divider()
-        st.markdown(f"### Editar {work_date_str} · **{sh_row['name']}** (necesarias: {req})")
+    st.divider()
+    st.markdown(f"### Editar {work_date_str} · **{sh_row['name']}** (necesarias: {req})")
 
         # disponibles según tu lógica (semanal + overrides + vacaciones)
         avail = available_employees_for_date_shift(date.fromisoformat(work_date_str), dow, shift_id)
@@ -460,6 +460,7 @@ with tab3:
 
     st.markdown("### Detalle")
     st.dataframe(df[["work_date","turno","full_name","hours"]], use_container_width=True, hide_index=True)
+
 
 
 
