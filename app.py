@@ -278,6 +278,29 @@ with tab2:
         st.stop()
 
     pick = st.date_input("Mes", value=date.today())
+    ms = month_start(pick)
+    allowed_close_from = next_month_start(pick)  # 1 del mes siguiente
+    today = date.today()
+
+    closed = is_month_closed(ms)
+
+    # Barra de estado
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        if closed:
+            st.warning(f"🔒 Mes cerrado: {ms.strftime('%B %Y')} (solo lectura)")
+        else:
+            st.info(f"🟢 Mes abierto: {ms.strftime('%B %Y')} (editable)")
+
+    with col2:
+        can_close = (today >= allowed_close_from) and (not closed)
+        if can_close:
+            if st.button("🔒 Cerrar mes", type="primary"):
+                close_month(ms, closed_by="admin")  # si luego quieres, ponemos el nombre real
+                st.success("Mes cerrado. Ya no se puede editar.")
+                st.rerun()
+        elif not closed:
+            st.caption(f"Se podrá cerrar desde: {allowed_close_from.strftime('%d/%m/%Y')}")
     start, end = month_range(pick)
 
     # --- Crear eventos (2 por día: Mañana y Tarde) ---
@@ -384,12 +407,17 @@ if "selected_work_date" in st.session_state and "selected_shift_id" in st.sessio
         "Personas asignadas (quedarán ACTIVAS)",
         options=avail_names,
         default=[n for n in assigned_active if n in avail_map],
-        key=f"ms_{work_date_str}_{shift_id}"
+        key=f"ms_{work_date_str}_{shift_id}",
+        disabled=closed
     )
 
     c1, c2 = st.columns([1, 2])
     with c1:
         if st.button("💾 Guardar asignación", type="primary", key=f"save_{work_date_str}_{shift_id}"):
+            if closed:
+                st.warning("Este mes está cerrado y no se puede editar.")
+                st.stop()
+            ...
             selected_ids = [avail_map[n] for n in selected]
             apply_assignments(work_date, dow, str(shift_id), selected_ids)
             st.success("Guardado.")
@@ -404,7 +432,7 @@ if "selected_work_date" in st.session_state and "selected_shift_id" in st.sessio
     else:
         for r in assigned.itertuples(index=False):
             k = f"act_{r.assignment_id}"
-            new_act = st.checkbox(r.full_name, value=bool(r.active), key=k)
+            new_act = st.checkbox(r.full_name, value=bool(r.active), key=k,disabled=closed)
             if new_act != bool(r.active):
                 set_assignment_active(r.assignment_id, new_act)
                 st.toast("Actualizado ✅")
@@ -412,6 +440,9 @@ if "selected_work_date" in st.session_state and "selected_shift_id" in st.sessio
 
     # Overrides (disponibilidad puntual)
     with st.expander("🛠️ Editar disponibilidad SOLO para este día (override)", expanded=False):
+        if closed:
+            st.info("Mes cerrado: no se pueden editar overrides.")
+            st.stop()
         st.caption("Esto NO cambia la disponibilidad semanal. Solo afecta a este día y este turno.")
 
         df_eff = get_effective_availability_all(work_date, dow, str(shift_id))
@@ -494,6 +525,7 @@ with tab3:
 
     st.markdown("### Detalle")
     st.dataframe(df[["work_date","turno","full_name","hours"]], use_container_width=True, hide_index=True)
+
 
 
 
