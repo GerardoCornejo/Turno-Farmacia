@@ -331,7 +331,15 @@ with tab2:
         work_date_str = st.session_state["selected_work_date"]
         shift_id = st.session_state["selected_shift_id"]
 
-        sh_row = shifts[shifts["id"] == shift_id].iloc[0]
+        match = shifts[shifts["id"].astype(str) == str(shift_id)]
+        if match.empty:
+            st.error("No he podido identificar el turno (shift_id) recibido del calendario.")
+            st.write("shift_id recibido:", shift_id)
+            st.write("Turnos disponibles (id, name):")
+            st.dataframe(shifts[["id","name","code"]], use_container_width=True, hide_index=True)
+        st.stop()
+
+    sh_row = match.iloc[0]
         req = int(sh_row["required_staff"])
         dow = int(date.fromisoformat(work_date_str).isoweekday())
 
@@ -452,6 +460,7 @@ with tab3:
 
     st.markdown("### Detalle")
     st.dataframe(df[["work_date","turno","full_name","hours"]], use_container_width=True, hide_index=True)
+
 
 
 
