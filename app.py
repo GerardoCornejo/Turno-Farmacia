@@ -341,7 +341,7 @@ with tab2:
 
     sh_row = match.iloc[0]
     req = int(sh_row["required_staff"])
-        dow = int(date.fromisoformat(work_date_str).isoweekday())
+    dow = int(date.fromisoformat(work_date_str).isoweekday())
 
         st.divider()
         st.markdown(f"### Editar {work_date_str} · **{sh_row['name']}** (necesarias: {req})")
@@ -460,6 +460,7 @@ with tab3:
 
     st.markdown("### Detalle")
     st.dataframe(df[["work_date","turno","full_name","hours"]], use_container_width=True, hide_index=True)
+
 
 
 
