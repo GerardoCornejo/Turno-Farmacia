@@ -125,6 +125,26 @@ def set_assignment_active(assignment_id: str, active: bool):
         where id=:id
     """, {"a": active, "id": assignment_id})
 
+def month_start(d: date) -> date:
+    return d.replace(day=1)
+
+def next_month_start(d: date) -> date:
+    ms = month_start(d)
+    if ms.month == 12:
+        return date(ms.year + 1, 1, 1)
+    return date(ms.year, ms.month + 1, 1)
+
+def is_month_closed(ms: date) -> bool:
+    df = read_df("select month_start from month_closures where month_start=:m", {"m": str(ms)})
+    return not df.empty
+
+def close_month(ms: date, closed_by: str = ""):
+    exec_sql("""
+        insert into month_closures (month_start, closed_by)
+        values (:m, :by)
+        on conflict (month_start) do nothing
+    """, {"m": str(ms), "by": closed_by})
+
 def apply_assignments(work_date: date, iso_dow: int, shift_id: str, selected_employee_ids: list[str]):
     # Regla: NO borramos, solo activamos/desactivamos
     existing = read_df("""
@@ -474,6 +494,7 @@ with tab3:
 
     st.markdown("### Detalle")
     st.dataframe(df[["work_date","turno","full_name","hours"]], use_container_width=True, hide_index=True)
+
 
 
 
