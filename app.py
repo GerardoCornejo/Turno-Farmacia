@@ -335,7 +335,15 @@ with tab2:
             title = f"{short_code}: {short_names}{more}"
             events.append({
                 "id": f"{iso}|{sh.id}",
-                "title": title,
+                # nombres asignados (si no hay, muestra —)
+                names = assigned_map.get((iso, sh.id), [])
+                short_code = "M" if "mañ" in sh.name.lower() else ("T" if "tar" in sh.name.lower() else sh.code)
+
+                short_names = ", ".join(names[:2]) if names else "—"
+                more = f" +{len(names)-2}" if len(names) > 2 else ""
+                icon = "✎" if names else "+"
+
+                title = f"{short_code}: {short_names}{more}  {icon}"
                 "start": iso,
                 "allDay": True,
                 "extendedProps": {"tooltip": full_text},  # <-- tooltip completo
@@ -541,6 +549,7 @@ with tab3:
 
     st.markdown("### Detalle")
     st.dataframe(df[["work_date", "turno", "full_name", "hours"]], use_container_width=True, hide_index=True)
+
 
 
 
