@@ -270,230 +270,215 @@ with tab1:
 # ===================== TAB 2: CALENDARIO MENSUAL (FULLCALENDAR) =====================
 with tab2:
     st.subheader("Calendario mensual (vista tipo Outlook)")
-    st.caption("Haz clic en Mañana/Tarde de un día para asignar personas.")
+    st.caption("En cada día verás 2 bloques (M/T). Pulsa en un bloque para editarlo en el panel de la derecha.")
 
     shifts = get_active_shifts()
     if shifts.empty:
         st.warning("No hay turnos activos en shift_types.")
         st.stop()
 
-    pick = st.date_input("Mes", value=date.today())
-    ms = month_start(pick)
-    allowed_close_from = next_month_start(pick)  # 1 del mes siguiente
-    today = date.today()
-
-    closed = is_month_closed(ms)
-
-    # Barra de estado
-    col1, col2 = st.columns([2, 1])
-    with col1:
-        if closed:
-            st.warning(f"🔒 Mes cerrado: {ms.strftime('%B %Y')} (solo lectura)")
-        else:
-            st.info(f"🟢 Mes abierto: {ms.strftime('%B %Y')} (editable)")
-
-    with col2:
-        can_close = (today >= allowed_close_from) and (not closed)
-        if can_close:
-            if st.button("🔒 Cerrar mes", type="primary"):
-                close_month(ms, closed_by="admin")  # si luego quieres, ponemos el nombre real
-                st.success("Mes cerrado. Ya no se puede editar.")
-                st.rerun()
-        elif not closed:
-            st.caption(f"Se podrá cerrar desde: {allowed_close_from.strftime('%d/%m/%Y')}")
+    pick = st.date_input("Mes", value=date.today(), key="cal_month")
     start, end = month_range(pick)
 
-    # --- Crear eventos (2 por día: Mañana y Tarde) ---
-    # Mapa de asignaciones activas por (fecha, shift_id) -> lista nombres
-    df_ass = read_df("""
-        select a.work_date, a.shift_type_id, e.full_name
-        from shift_assignments a
-        join employees e on e.id=a.employee_id
-        where a.active=true and a.work_date >= :s and a.work_date < :e
-        order by a.work_date, a.shift_type_id, e.full_name
-    """, {"s": str(start), "e": str(end)})
+    # Dos columnas: calendario (izquierda) + editor (derecha)
+    col_cal, col_edit = st.columns([3, 2], gap="large")
 
-    assigned_map = {}
-    if not df_ass.empty:
-        for (wd, sid), g in df_ass.groupby(["work_date","shift_type_id"]):
-            assigned_map[(str(wd), str(sid))] = g["full_name"].tolist()
+    # --------------------------
+    # IZQUIERDA: CALENDARIO
+    # --------------------------
+    with col_cal:
+        # Traer asignaciones ACTIVAS del mes, para pintar el calendario
+        df_ass = read_df("""
+            select a.work_date, a.shift_type_id, e.full_name
+            from shift_assignments a
+            join employees e on e.id=a.employee_id
+            where a.active=true and a.work_date >= :s and a.work_date < :e
+            order by a.work_date, a.shift_type_id, e.full_name
+        """, {"s": str(start), "e": str(end)})
 
-    # Eventos “clicables” por día/turno
-    events = []
-    d = start
-    while d < end:
-        iso = d.isoformat()
-        dow = int(d.isoweekday())
-        for sh in shifts.itertuples(index=False):
-            names = assigned_map.get((iso, sh.id), [])
-            # etiqueta corta para el turno
-            short_code = "M" if "mañ" in sh.name.lower() else ("T" if "tar" in sh.name.lower() else sh.code)
-            full_text = f"{sh.name}: " + (", ".join(names) if names else "—")
-            # título corto para que no se amontone en el calendario
-            short_names = ", ".join(names[:2]) if names else "—"
-            more = f" +{len(names)-2}" if len(names) > 2 else ""
-            title = f"{short_code}: {short_names}{more}"
-            events.append({
-                "id": f"{iso}|{sh.id}",
-                # nombres asignados (si no hay, muestra —)
-                names = assigned_map.get((iso, sh.id), [])
-                short_code = "M" if "mañ" in sh.name.lower() else ("T" if "tar" in sh.name.lower() else sh.code)
+        assigned_map = {}
+        if not df_ass.empty:
+            for (wd, sid), g in df_ass.groupby(["work_date", "shift_type_id"]):
+                assigned_map[(str(wd), str(sid))] = g["full_name"].tolist()
+
+        # Crear eventos: 2 por día (M/T)
+        events = []
+        d = start
+        while d < end:
+            iso = d.isoformat()
+            for sh in shifts.itertuples(index=False):
+                names = assigned_map.get((iso, str(sh.id)), [])
+
+                # Icono + / ✎
+                icon = "✎" if names else "+"
+                # Código corto M/T (si no coincide con nombre, usa sh.code)
+                nm = str(sh.name).lower()
+                short_code = "M" if "mañ" in nm else ("T" if "tar" in nm else str(sh.code))
 
                 short_names = ", ".join(names[:2]) if names else "—"
                 more = f" +{len(names)-2}" if len(names) > 2 else ""
-                icon = "✎" if names else "+"
-
                 title = f"{short_code}: {short_names}{more}  {icon}"
-                "start": iso,
-                "allDay": True,
-                "extendedProps": {"tooltip": full_text},  # <-- tooltip completo
-})
-        d += timedelta(days=1)
 
-    # --- Opciones FullCalendar (mes a pantalla completa) ---
-    options = {
-        "initialView": "dayGridMonth",
-        "headerToolbar": {
-            "left": "prev,next today",
-            "center": "title",
-            "right": "dayGridMonth,listMonth"
-        },
-        "height": 750,  # “pantalla completa” aproximada
-        "firstDay": 1,  # lunes
-        "dayMaxEvents": True,
-    }
-   
-    # Render calendario
-    cal_state = calendar(events=events, options=options, key="fullcalendar")
+                # Colores por cobertura (opcional, mejora visual)
+                req = int(sh.required_staff)
+                count = len(names)
+                if count >= req:
+                    color = "#2ecc71"  # verde
+                elif count == req - 1:
+                    color = "#f1c40f"  # amarillo
+                else:
+                    color = "#e74c3c"  # rojo
 
-    # --- Capturar click en evento (Mañana/Tarde de un día) ---
-    clicked = None
-    if isinstance(cal_state, dict):
-        clicked = cal_state.get("eventClick")
+                events.append({
+                    "id": f"{iso}|{sh.id}",   # esto lo usamos para saber qué se clicó
+                    "title": title,
+                    "start": iso,
+                    "allDay": True,
+                    "backgroundColor": color,
+                    "borderColor": color,
+                })
+            d += timedelta(days=1)
 
-    if clicked and "event" in clicked and "id" in clicked["event"]:
-        event_id = clicked["event"]["id"]  # "YYYY-MM-DD|shift_uuid"
-        work_date_str, shift_id = event_id.split("|", 1)
-        st.session_state["selected_work_date"] = work_date_str
-        st.session_state["selected_shift_id"] = shift_id
+        options = {
+            "initialView": "dayGridMonth",
+            "headerToolbar": {"left": "prev,next today", "center": "title", "right": "dayGridMonth,listMonth"},
+            "height": 780,
+            "firstDay": 1,
+            "dayMaxEvents": True,
+        }
 
-    # PANEL: solo si hay selección
-if "selected_work_date" in st.session_state and "selected_shift_id" in st.session_state:
-    work_date_str = st.session_state["selected_work_date"]
-    shift_id = st.session_state["selected_shift_id"]
+        cal_state = calendar(events=events, options=options, key="fullcalendar")
 
-    work_date = date.fromisoformat(work_date_str)
-    dow = int(work_date.isoweekday())
+        # Capturar click en evento
+        clicked = None
+        if isinstance(cal_state, dict):
+            clicked = cal_state.get("eventClick")
 
-    match = shifts[shifts["id"].astype(str) == str(shift_id)]
-    if match.empty:
-        st.error("No he podido identificar el turno (shift_id) recibido del calendario.")
-        st.write("shift_id recibido:", shift_id)
-        st.write("Turnos disponibles (id, name, code):")
-        st.dataframe(shifts[["id", "name", "code"]], use_container_width=True, hide_index=True)
-        st.stop()
+        if clicked and "event" in clicked and "id" in clicked["event"]:
+            event_id = clicked["event"]["id"]  # "YYYY-MM-DD|shift_uuid"
+            try:
+                work_date_str, shift_id = event_id.split("|", 1)
+                st.session_state["selected_work_date"] = work_date_str
+                st.session_state["selected_shift_id"] = shift_id
+            except Exception:
+                st.session_state.pop("selected_work_date", None)
+                st.session_state.pop("selected_shift_id", None)
 
-    sh_row = match.iloc[0]
-    req = int(sh_row["required_staff"])
+    # --------------------------
+    # DERECHA: EDITOR
+    # --------------------------
+    with col_edit:
+        st.markdown("### Editor del turno")
 
-    st.divider()
-    st.markdown(f"### Editar {work_date_str} · **{sh_row['name']}** (necesarias: {req})")
+        if "selected_work_date" not in st.session_state or "selected_shift_id" not in st.session_state:
+            st.info("Pulsa en un bloque del calendario (M/T) para editarlo aquí.")
+            st.stop()
 
-    # Disponibles según semanal + overrides + vacaciones
-    avail = available_employees_for_date_shift(work_date, dow, str(shift_id))
-    if avail.empty:
-        st.warning("Nadie disponible según disponibilidad/vacaciones.")
-        st.stop()
+        # Botón cerrar editor
+        if st.button("❌ Cerrar editor", key="close_editor"):
+            st.session_state.pop("selected_work_date", None)
+            st.session_state.pop("selected_shift_id", None)
+            st.rerun()
 
-    avail_names = avail["full_name"].tolist()
-    avail_map = dict(zip(avail_names, avail["id"].tolist()))
+        work_date_str = st.session_state["selected_work_date"]
+        shift_id = st.session_state["selected_shift_id"]
 
-    assigned = get_assignments(work_date, str(shift_id))
-    assigned_active = assigned[assigned["active"] == True]["full_name"].tolist() if not assigned.empty else []
+        work_date = date.fromisoformat(work_date_str)
+        dow = int(work_date.isoweekday())
 
-    selected = st.multiselect(
-        "Personas asignadas (quedarán ACTIVAS)",
-        options=avail_names,
-        default=[n for n in assigned_active if n in avail_map],
-        key=f"ms_{work_date_str}_{shift_id}",
-        disabled=closed
-    )
+        # Encontrar el turno
+        match = shifts[shifts["id"].astype(str) == str(shift_id)]
+        if match.empty:
+            st.error("No pude identificar el turno seleccionado. (ID no coincide)")
+            st.write("shift_id recibido:", shift_id)
+            st.dataframe(shifts[["id", "code", "name"]], use_container_width=True, hide_index=True)
+            st.stop()
 
-    c1, c2 = st.columns([1, 2])
-    with c1:
+        sh_row = match.iloc[0]
+        req = int(sh_row["required_staff"])
+
+        st.write(f"**Fecha:** {work_date_str}")
+        st.write(f"**Turno:** {sh_row['name']} ({sh_row['start_time']}–{sh_row['end_time']})")
+        st.write(f"**Necesarias:** {req}")
+
+        # Personas disponibles para ese día/turno (semanal + override + vacaciones)
+        avail = available_employees_for_date_shift(work_date, dow, str(shift_id))
+        if avail.empty:
+            st.warning("Nadie disponible según disponibilidad/vacaciones.")
+            st.stop()
+
+        avail_names = avail["full_name"].tolist()
+        avail_map = dict(zip(avail_names, avail["id"].tolist()))
+
+        assigned = get_assignments(work_date, str(shift_id))
+        assigned_active = (
+            assigned[assigned["active"] == True]["full_name"].tolist()
+            if not assigned.empty
+            else []
+        )
+
+        # Selector principal
+        selected = st.multiselect(
+            "Asignar personas (quedarán ACTIVAS)",
+            options=avail_names,
+            default=[n for n in assigned_active if n in avail_map],
+            key=f"ms_{work_date_str}_{shift_id}",
+        )
+
+        # Botón guardar
         if st.button("💾 Guardar asignación", type="primary", key=f"save_{work_date_str}_{shift_id}"):
-            if closed:
-                st.warning("Este mes está cerrado y no se puede editar.")
-                st.stop()
-            ...
             selected_ids = [avail_map[n] for n in selected]
             apply_assignments(work_date, dow, str(shift_id), selected_ids)
             st.success("Guardado.")
             st.rerun()
-    with c2:
-        st.caption("Puedes activar/desactivar asignaciones una a una más abajo.")
 
-    st.divider()
-    st.write("Asignaciones existentes (activar/desactivar):")
-    if assigned.empty:
-        st.info("No hay asignaciones todavía.")
-    else:
-        for r in assigned.itertuples(index=False):
-            k = f"act_{r.assignment_id}"
-            new_act = st.checkbox(r.full_name, value=bool(r.active), key=k,disabled=closed)
-            if new_act != bool(r.active):
-                set_assignment_active(r.assignment_id, new_act)
-                st.toast("Actualizado ✅")
-                st.rerun()
+        # Activar/desactivar existente
+        st.divider()
+        st.caption("Asignaciones existentes (activar/desactivar):")
+        if assigned.empty:
+            st.info("No hay asignaciones todavía.")
+        else:
+            for r in assigned.itertuples(index=False):
+                k = f"act_{r.assignment_id}"
+                new_act = st.checkbox(r.full_name, value=bool(r.active), key=k)
+                if new_act != bool(r.active):
+                    set_assignment_active(r.assignment_id, new_act)
+                    st.toast("Actualizado ✅")
+                    st.rerun()
 
-    # Overrides (disponibilidad puntual)
-    with st.expander("🛠️ Editar disponibilidad SOLO para este día (override)", expanded=False):
-        if closed:
-            st.info("Mes cerrado: no se pueden editar overrides.")
-            st.stop()
-        st.caption("Esto NO cambia la disponibilidad semanal. Solo afecta a este día y este turno.")
+        # Overrides (disponibilidad puntual)
+        st.divider()
+        with st.expander("🛠️ Disponibilidad puntual (override)", expanded=False):
+            st.caption("Esto NO cambia la disponibilidad semanal. Solo este día y este turno.")
 
-        df_eff = get_effective_availability_all(work_date, dow, str(shift_id))
+            df_eff = get_effective_availability_all(work_date, dow, str(shift_id))
+            reason = st.text_input("Motivo (opcional)", value="", key=f"ov_reason_{work_date_str}_{shift_id}")
 
-        reason = st.text_input(
-            "Motivo (opcional)",
-            value="",
-            key=f"ov_reason_{work_date_str}_{shift_id}"
-        )
+            for r in df_eff.itertuples(index=False):
+                if r.is_time_off:
+                    st.checkbox(
+                        f"{r.full_name} (vacaciones)",
+                        value=False,
+                        key=f"ov_{r.id}_{work_date_str}_{shift_id}",
+                        disabled=True
+                    )
+                    continue
 
-        for r in df_eff.itertuples(index=False):
-            if r.is_time_off:
-                st.checkbox(
-                    f"{r.full_name} (vacaciones)",
-                    value=False,
-                    key=f"ov_{r.id}_{work_date_str}_{shift_id}",
-                    disabled=True
+                new_av = st.checkbox(
+                    r.full_name,
+                    value=bool(r.is_available),
+                    key=f"ov_{r.id}_{work_date_str}_{shift_id}"
                 )
-                continue
-
-            new_av = st.checkbox(
-                r.full_name,
-                value=bool(r.is_available),
-                key=f"ov_{r.id}_{work_date_str}_{shift_id}"
-            )
-
-            if new_av != bool(r.is_available):
-                if closed:
-                    st.warning("Mes cerrado: no se puede editar.")
-                    st.stop()
-                
-                upsert_override(
-                    emp_id=str(r.id),
-                    work_date=work_date,
-                    shift_id=str(shift_id),
-                    available=new_av,
-                    reason=reason
-                )
-                st.toast("Override guardado ✅")
-                st.rerun()
-
-else:
-    st.info("Haz clic en un bloque (Mañana/Tarde) del calendario para editarlo.")
+                if new_av != bool(r.is_available):
+                    upsert_override(
+                        emp_id=str(r.id),
+                        work_date=work_date,
+                        shift_id=str(shift_id),
+                        available=new_av,
+                        reason=reason
+                    )
+                    st.toast("Override guardado ✅")
+                    st.rerun()
 # ===================== TAB 3: DASHBOARD =====================
 with tab3:
     st.subheader("Dashboard (horas reales por persona)")
@@ -549,6 +534,7 @@ with tab3:
 
     st.markdown("### Detalle")
     st.dataframe(df[["work_date", "turno", "full_name", "hours"]], use_container_width=True, hide_index=True)
+
 
 
 
