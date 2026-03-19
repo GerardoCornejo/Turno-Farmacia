@@ -704,15 +704,16 @@ with tab3:
     if df_problemas.empty:
         st.success("🎉 ¡Cobertura completa en todo el rango seleccionado!")
     else:
-        # Semáforo visual
-        def semaforo(row):
-            if row["asignadas"] == 0:
-                return "🔴 Sin personal"
-            else:
-                return "🟡 Parcial"
- 
-        df_problemas["estado"] = df_problemas.apply(semaforo, axis=1)
-        df_problemas["fecha"] = pd.to_datetime(df_problemas["fecha"]).dt.strftime("%d/%m/%Y (%a)")
+        # Guardar fecha como date para ordenar correctamente ANTES de formatear a string
+        df_problemas["fecha_ord"] = pd.to_datetime(
+            df_problemas["fecha"].apply(str), format="%Y-%m-%d"
+        )
+        df_problemas["estado"] = df_problemas.apply(
+            lambda r: "🔴 Sin personal" if r["asignadas"] == 0 else "🟡 Parcial", axis=1
+        )
+        # Formatear para mostrar DESPUÉS de ordenar
+        df_problemas = df_problemas.sort_values(["fecha_ord", "turno"])
+        df_problemas["fecha"] = df_problemas["fecha_ord"].dt.strftime("%d/%m/%Y (%a)")
  
         st.dataframe(
             df_problemas[["fecha", "turno", "requeridas", "asignadas", "deficit", "estado"]]
@@ -723,19 +724,22 @@ with tab3:
                 "asignadas": "Asignadas",
                 "deficit": "Déficit",
                 "estado": "Estado",
-            })
-            .sort_values(["Fecha", "Turno"]),
+            }),
             use_container_width=True,
             hide_index=True,
         )
  
-        # Resumen de déficit por turno
+        # Resumen de déficit por turno (sobre df_problemas antes del rename)
         st.markdown("#### Déficit acumulado por turno")
         df_by_shift = (
             df_problemas.groupby("turno")
             .agg(dias_con_deficit=("deficit", "count"), deficit_total=("deficit", "sum"))
             .reset_index()
-            .rename(columns={"turno": "Turno", "dias_con_deficit": "Días con déficit", "deficit_total": "Personas faltantes (total)"})
+            .rename(columns={
+                "turno": "Turno",
+                "dias_con_deficit": "Días con déficit",
+                "deficit_total": "Personas faltantes (total)"
+            })
             .sort_values("Personas faltantes (total)", ascending=False)
         )
         st.dataframe(df_by_shift, use_container_width=True, hide_index=True)
@@ -761,19 +765,23 @@ with tab3:
  
     if df.empty:
         st.info("No hay asignaciones activas en ese rango.")
-        st.stop()
+    else:
+        # Especificar formato explícito para evitar warnings de pandas
+        df["start_time"] = pd.to_datetime(df["start_time"].astype(str), format="mixed")
+        df["end_time"]   = pd.to_datetime(df["end_time"].astype(str), format="mixed")
+        df["hours"] = (df["end_time"] - df["start_time"]).dt.total_seconds() / 3600.0
  
-    df["start_time"] = pd.to_datetime(df["start_time"].astype(str))
-    df["end_time"] = pd.to_datetime(df["end_time"].astype(str))
-    df["hours"] = (df["end_time"] - df["start_time"]).dt.total_seconds() / 3600.0
+        resumen = df.groupby("full_name").agg(
+            turnos=("turno", "count"),
+            horas=("hours", "sum")
+        ).reset_index().sort_values("horas", ascending=False)
  
-    resumen = df.groupby("full_name").agg(
-        turnos=("turno", "count"),
-        horas=("hours", "sum")
-    ).reset_index().sort_values("horas", ascending=False)
+        st.markdown("### Horas por persona (solo asignaciones activas)")
+        st.dataframe(resumen, use_container_width=True, hide_index=True)
  
-    st.markdown("### Horas por persona (solo asignaciones activas)")
-    st.dataframe(resumen, use_container_width=True, hide_index=True)
- 
-    st.markdown("### Detalle")
-    st.dataframe(df[["work_date", "turno", "full_name", "hours"]], use_container_width=True, hide_index=True)
+        st.markdown("### Detalle")
+        st.dataframe(
+            df[["work_date", "turno", "full_name", "hours"]],
+            use_container_width=True,
+            hide_index=True,
+        )
