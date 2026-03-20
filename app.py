@@ -1,6 +1,3 @@
-
-Copiar
-
 import streamlit as st
 import pandas as pd
 from streamlit_calendar import calendar
@@ -1082,3 +1079,4 @@ with tab3:
  
         except Exception as e:
             st.error(f"Error calculando horas: {e}")
+ 
