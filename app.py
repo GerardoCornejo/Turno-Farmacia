@@ -1,8 +1,12 @@
+
+Copiar
+
 import streamlit as st
 import pandas as pd
-from streamlit_calendar import calendar
+import json
 from datetime import date, timedelta
 from sqlalchemy import create_engine, text
+import streamlit.components.v1 as components
  
 st.set_page_config(page_title="Turnos Farmacia", layout="wide")
  
@@ -737,63 +741,210 @@ with tab2:
             for (wd, sid), g in df_ass.groupby(["work_date", "shift_type_id"]):
                 assigned_map[(str(wd), str(sid))] = g["full_name"].tolist()
  
-        events = []
+        # Build calendar data for HTML component
+        cal_days = []
         d = start
         while d < end:
             iso = d.isoformat()
+            day_shifts = []
             for sh in shifts.itertuples(index=False):
                 names = assigned_map.get((iso, str(sh.id)), [])
- 
-                icon = "✎" if names else "+"
-                nm = str(sh.name).lower()
-                short_code = "M" if "mañ" in nm else ("T" if "tar" in nm else str(sh.code))
- 
-                short_names = ", ".join(names[:2]) if names else "—"
-                more = f" +{len(names)-2}" if len(names) > 2 else ""
-                title = f"{short_code}: {short_names}{more}  {icon}"
- 
                 req = int(sh.required_staff)
                 count = len(names)
+                nm = str(sh.name).lower()
+                short_code = "M" if "mañ" in nm else ("T" if "tar" in nm else str(sh.code))
                 if count >= req:
-                    color = "#2ecc71"
+                    color = "#27ae60"
                 elif count == req - 1:
-                    color = "#f1c40f"
+                    color = "#e67e22"
                 else:
                     color = "#e74c3c"
- 
-                events.append({
+                short_names = ", ".join(names[:2]) if names else "sin asignar"
+                more = f" +{count-2}" if count > 2 else ""
+                day_shifts.append({
                     "id": f"{iso}|{sh.id}",
-                    "title": title,
-                    "start": iso,
-                    "allDay": True,
-                    "backgroundColor": color,
-                    "borderColor": color,
+                    "code": short_code,
+                    "label": f"{short_names}{more}",
+                    "color": color,
                 })
+            cal_days.append({
+                "date": iso,
+                "day": d.day,
+                "dow": d.isoweekday(),
+                "shifts": day_shifts,
+            })
             d += timedelta(days=1)
  
-        options = {
-            "initialView": "dayGridMonth",
-            "headerToolbar": {"left": "prev,next today", "center": "title", "right": "dayGridMonth,listMonth"},
-            "height": 780,
-            "firstDay": 1,
-            "dayMaxEvents": True,
-        }
+        # First day of week offset (Monday=1)
+        first_dow = start.isoweekday()  # 1=Mon..7=Sun
+        month_name = start.strftime("%B %Y")
  
-        cal_state = calendar(events=events, options=options, key="fullcalendar")
+        cal_data_json = json.dumps(cal_days)
  
-        clicked = None
-        if isinstance(cal_state, dict):
-            clicked = cal_state.get("eventClick")
+        cal_html = f"""
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+* {{ box-sizing: border-box; margin: 0; padding: 0; }}
+body {{ font-family: 'DM Sans', -apple-system, sans-serif; background: transparent; }}
+.cal-header {{
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 0 12px 0;
+}}
+.cal-title {{
+    font-size: 1rem; font-weight: 600; color: #1C2B1E; letter-spacing: 0.02em;
+}}
+.cal-grid {{
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 3px;
+}}
+.cal-dow {{
+    text-align: center; font-size: 0.7rem; font-weight: 600;
+    letter-spacing: 0.08em; text-transform: uppercase;
+    color: #7A8C7C; padding: 4px 0 8px 0;
+}}
+.cal-dow.weekend {{ color: #b0a898; }}
+.cal-cell {{
+    background: #fff;
+    border: 1px solid #E8E5DE;
+    border-radius: 6px;
+    padding: 5px;
+    min-height: 80px;
+    cursor: pointer;
+    transition: border-color 0.15s, box-shadow 0.15s;
+}}
+.cal-cell:hover {{
+    border-color: #2D5A35;
+    box-shadow: 0 0 0 2px rgba(45,90,53,0.1);
+}}
+.cal-cell.empty {{
+    background: transparent; border-color: transparent; cursor: default;
+}}
+.cal-cell.today {{ border-color: #2D5A35; border-width: 2px; }}
+.day-num {{
+    font-size: 0.75rem; font-weight: 600; color: #4A5C4C;
+    margin-bottom: 4px; text-align: right;
+}}
+.cal-cell.today .day-num {{ color: #2D5A35; }}
+.shift-pill {{
+    border-radius: 4px;
+    padding: 2px 5px;
+    font-size: 0.65rem;
+    font-weight: 500;
+    color: #fff;
+    margin-bottom: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: block;
+}}
+.cal-cell.selected {{
+    border-color: #2D5A35 !important;
+    border-width: 2px !important;
+    box-shadow: 0 0 0 3px rgba(45,90,53,0.2) !important;
+}}
+</style>
+</head>
+<body>
+<div class="cal-header">
+  <span class="cal-title">{month_name}</span>
+</div>
+<div class="cal-grid" id="grid"></div>
+<script>
+const days = {cal_data_json};
+const firstDow = {first_dow};
+const today = new Date().toISOString().split('T')[0];
+const grid = document.getElementById('grid');
  
-        if clicked and "event" in clicked and "id" in clicked["event"]:
-            event_id = clicked["event"]["id"]
+const dowLabels = ['Lun','Mar','Mie','Jue','Vie','Sab','Dom'];
+const isWeekend = [false,false,false,false,false,true,true];
+dowLabels.forEach((d,i) => {{
+  const el = document.createElement('div');
+  el.className = 'cal-dow' + (isWeekend[i] ? ' weekend' : '');
+  el.textContent = d;
+  grid.appendChild(el);
+}});
+ 
+// Empty cells before first day
+for (let i = 1; i < firstDow; i++) {{
+  const el = document.createElement('div');
+  el.className = 'cal-cell empty';
+  grid.appendChild(el);
+}}
+ 
+days.forEach(day => {{
+  const cell = document.createElement('div');
+  cell.className = 'cal-cell' + (day.date === today ? ' today' : '');
+  cell.dataset.date = day.date;
+ 
+  const num = document.createElement('div');
+  num.className = 'day-num';
+  num.textContent = day.day;
+  cell.appendChild(num);
+ 
+  day.shifts.forEach(sh => {{
+    const pill = document.createElement('span');
+    pill.className = 'shift-pill';
+    pill.style.background = sh.color;
+    pill.textContent = sh.code + ': ' + sh.label;
+    pill.dataset.id = sh.id;
+    cell.appendChild(pill);
+  }});
+ 
+  cell.addEventListener('click', function(e) {{
+    const pill = e.target.closest('.shift-pill');
+    const id = pill ? pill.dataset.id : (day.shifts.length > 0 ? day.shifts[0].id : null);
+    if (!id) return;
+    document.querySelectorAll('.cal-cell').forEach(c => c.classList.remove('selected'));
+    cell.classList.add('selected');
+    window.parent.postMessage({{type: 'cal_click', id: id}}, '*');
+  }});
+ 
+  grid.appendChild(cell);
+}});
+</script>
+</body>
+</html>
+"""
+        components.html(cal_html, height=620, scrolling=False)
+ 
+        # Handle calendar click via query params
+        click_id = st.query_params.get("cal_click", None)
+        if click_id:
             try:
-                work_date_str, shift_id = event_id.split("|", 1)
+                work_date_str, shift_id = click_id.split("|", 1)
                 st.session_state["selected_work_date"] = work_date_str
                 st.session_state["selected_shift_id"] = shift_id
+                st.query_params.clear()
+                st.rerun()
             except Exception:
-                st.session_state.pop("selected_work_date", None)
-                st.session_state.pop("selected_shift_id", None)
+                pass
+ 
+        # Fallback: click via selectbox for reliability
+        st.caption("O selecciona directamente:")
+        all_options = []
+        d2 = start
+        while d2 < end:
+            for sh in shifts.itertuples(index=False):
+                nm = str(sh.name).lower()
+                short_code = "M" if "mañ" in nm else ("T" if "tar" in nm else str(sh.code))
+                label = f"{d2.strftime('%d/%m')} {short_code} — {sh.name}"
+                all_options.append((label, d2.isoformat(), str(sh.id)))
+            d2 += timedelta(days=1)
+ 
+        sel_label = st.selectbox(
+            "Día y turno",
+            options=["(ninguno)"] + [o[0] for o in all_options],
+            key="cal_selectbox"
+        )
+        if sel_label != "(ninguno)":
+            chosen = next((o for o in all_options if o[0] == sel_label), None)
+            if chosen:
+                st.session_state["selected_work_date"] = chosen[1]
+                st.session_state["selected_shift_id"] = chosen[2]
  
     with col_edit:
         st.markdown("### Editor del turno")
