@@ -720,8 +720,7 @@ with tab2:
             st.rerun()
  
     st.divider()
-    # ---
- 
+    # --- CALENDARIO A ANCHO COMPLETO ---
     col_cal, col_edit = st.columns([3, 2], gap="large")
  
     with col_cal:
@@ -756,8 +755,15 @@ with tab2:
                     color = "#e67e22"
                 else:
                     color = "#e74c3c"
-                short_names = ", ".join(names[:2]) if names else "sin asignar"
-                more = f" +{count-2}" if count > 2 else ""
+                short_names_list = []
+                for n in names[:3]:
+                    # Handle "APELLIDO APELLIDO, NOMBRE" or "Nombre Apellido" formats
+                    clean = n.strip().replace(",", " ").split()
+                    first = clean[0].capitalize() if clean else ""
+                    if first:
+                        short_names_list.append(first)
+                short_names = ", ".join(short_names_list) if short_names_list else "sin asignar"
+                more = f" +{count-3}" if count > 3 else ""
                 day_shifts.append({
                     "id": f"{iso}|{sh.id}",
                     "code": short_code,
@@ -778,135 +784,67 @@ with tab2:
  
         cal_data_json = json.dumps(cal_days)
  
-        cal_html = f"""
-<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<style>
-* {{ box-sizing: border-box; margin: 0; padding: 0; }}
-body {{ font-family: 'DM Sans', -apple-system, sans-serif; background: transparent; }}
-.cal-header {{
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 0 0 12px 0;
-}}
-.cal-title {{
-    font-size: 1rem; font-weight: 600; color: #1C2B1E; letter-spacing: 0.02em;
-}}
-.cal-grid {{
-    display: grid;
-    grid-template-columns: repeat(7, 1fr);
-    gap: 3px;
-}}
-.cal-dow {{
-    text-align: center; font-size: 0.7rem; font-weight: 600;
-    letter-spacing: 0.08em; text-transform: uppercase;
-    color: #7A8C7C; padding: 4px 0 8px 0;
-}}
-.cal-dow.weekend {{ color: #b0a898; }}
-.cal-cell {{
-    background: #fff;
-    border: 1px solid #E8E5DE;
-    border-radius: 6px;
-    padding: 5px;
-    min-height: 80px;
-    cursor: pointer;
-    transition: border-color 0.15s, box-shadow 0.15s;
-}}
-.cal-cell:hover {{
-    border-color: #2D5A35;
-    box-shadow: 0 0 0 2px rgba(45,90,53,0.1);
-}}
-.cal-cell.empty {{
-    background: transparent; border-color: transparent; cursor: default;
-}}
-.cal-cell.today {{ border-color: #2D5A35; border-width: 2px; }}
-.day-num {{
-    font-size: 0.75rem; font-weight: 600; color: #4A5C4C;
-    margin-bottom: 4px; text-align: right;
-}}
-.cal-cell.today .day-num {{ color: #2D5A35; }}
-.shift-pill {{
-    border-radius: 4px;
-    padding: 2px 5px;
-    font-size: 0.65rem;
-    font-weight: 500;
-    color: #fff;
-    margin-bottom: 2px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    display: block;
-}}
-.cal-cell.selected {{
-    border-color: #2D5A35 !important;
-    border-width: 2px !important;
-    box-shadow: 0 0 0 3px rgba(45,90,53,0.2) !important;
-}}
-</style>
-</head>
-<body>
-<div class="cal-header">
-  <span class="cal-title">{month_name}</span>
-</div>
+        cal_html = f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"><style>
+*{{box-sizing:border-box;margin:0;padding:0}}
+body{{font-family:-apple-system,sans-serif;background:transparent}}
+.cal-title{{font-size:0.9rem;font-weight:600;color:#1C2B1E;padding:0 0 10px 0;display:block}}
+.cal-grid{{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;width:100%}}
+.cal-dow{{text-align:center;font-size:0.6rem;font-weight:700;letter-spacing:0.06em;
+    text-transform:uppercase;color:#7A8C7C;padding:3px 0 6px 0}}
+.cal-dow.we{{color:#b0a898}}
+.cal-cell{{background:#fff;border:1px solid #E8E5DE;border-radius:5px;
+    padding:4px;min-height:62px;cursor:pointer;overflow:hidden;
+    transition:border-color 0.12s,box-shadow 0.12s}}
+.cal-cell:hover{{border-color:#2D5A35;box-shadow:0 0 0 2px rgba(45,90,53,0.12)}}
+.cal-cell.empty{{background:transparent;border-color:transparent;cursor:default}}
+.cal-cell.today{{border-color:#2D5A35;border-width:2px}}
+.cal-cell.selected{{border-color:#2D5A35!important;border-width:2px!important;
+    box-shadow:0 0 0 3px rgba(45,90,53,0.2)!important}}
+.dn{{font-size:0.65rem;font-weight:700;color:#4A5C4C;text-align:right;margin-bottom:3px}}
+.cal-cell.today .dn{{color:#2D5A35}}
+.pill{{border-radius:3px;padding:1px 4px;font-size:0.58rem;font-weight:600;
+    color:#fff;margin-bottom:2px;white-space:nowrap;overflow:hidden;
+    text-overflow:ellipsis;display:block;line-height:1.5}}
+</style></head><body>
+<span class="cal-title">{month_name}</span>
 <div class="cal-grid" id="grid"></div>
 <script>
-const days = {cal_data_json};
-const firstDow = {first_dow};
-const today = new Date().toISOString().split('T')[0];
-const grid = document.getElementById('grid');
- 
-const dowLabels = ['Lun','Mar','Mie','Jue','Vie','Sab','Dom'];
-const isWeekend = [false,false,false,false,false,true,true];
-dowLabels.forEach((d,i) => {{
-  const el = document.createElement('div');
-  el.className = 'cal-dow' + (isWeekend[i] ? ' weekend' : '');
-  el.textContent = d;
-  grid.appendChild(el);
+const days={cal_data_json};
+const firstDow={first_dow};
+const today=new Date().toISOString().split('T')[0];
+const grid=document.getElementById('grid');
+['Lun','Mar','Mie','Jue','Vie','Sab','Dom'].forEach((d,i)=>{{
+  const el=document.createElement('div');
+  el.className='cal-dow'+(i>=5?' we':'');
+  el.textContent=d;grid.appendChild(el);
 }});
- 
-// Empty cells before first day
-for (let i = 1; i < firstDow; i++) {{
-  const el = document.createElement('div');
-  el.className = 'cal-cell empty';
-  grid.appendChild(el);
+for(let i=1;i<firstDow;i++){{
+  const el=document.createElement('div');el.className='cal-cell empty';grid.appendChild(el);
 }}
- 
-days.forEach(day => {{
-  const cell = document.createElement('div');
-  cell.className = 'cal-cell' + (day.date === today ? ' today' : '');
-  cell.dataset.date = day.date;
- 
-  const num = document.createElement('div');
-  num.className = 'day-num';
-  num.textContent = day.day;
-  cell.appendChild(num);
- 
-  day.shifts.forEach(sh => {{
-    const pill = document.createElement('span');
-    pill.className = 'shift-pill';
-    pill.style.background = sh.color;
-    pill.textContent = sh.code + ': ' + sh.label;
-    pill.dataset.id = sh.id;
-    cell.appendChild(pill);
+days.forEach(day=>{{
+  const cell=document.createElement('div');
+  cell.className='cal-cell'+(day.date===today?' today':'');
+  cell.dataset.date=day.date;
+  const dn=document.createElement('div');dn.className='dn';dn.textContent=day.day;
+  cell.appendChild(dn);
+  day.shifts.forEach(sh=>{{
+    const p=document.createElement('span');p.className='pill';
+    p.style.background=sh.color;p.textContent=sh.code+': '+sh.label;
+    p.dataset.id=sh.id;cell.appendChild(p);
   }});
- 
-  cell.addEventListener('click', function(e) {{
-    const pill = e.target.closest('.shift-pill');
-    const id = pill ? pill.dataset.id : (day.shifts.length > 0 ? day.shifts[0].id : null);
-    if (!id) return;
-    document.querySelectorAll('.cal-cell').forEach(c => c.classList.remove('selected'));
+  cell.addEventListener('click',function(e){{
+    const p=e.target.closest('.pill');
+    const id=p?p.dataset.id:(day.shifts.length>0?day.shifts[0].id:null);
+    if(!id)return;
+    document.querySelectorAll('.cal-cell').forEach(c=>c.classList.remove('selected'));
     cell.classList.add('selected');
-    window.parent.postMessage({{type: 'cal_click', id: id}}, '*');
+    window.parent.postMessage({{type:'cal_click',id:id}},'*');
   }});
- 
   grid.appendChild(cell);
 }});
-</script>
-</body>
-</html>
-"""
-        components.html(cal_html, height=620, scrolling=False)
+</script></body></html>"""
+        components.html(cal_html, height=560, scrolling=False)
  
         # Handle calendar click via query params
         click_id = st.query_params.get("cal_click", None)
