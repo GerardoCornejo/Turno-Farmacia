@@ -293,15 +293,15 @@ def auto_assign_month(target_month: date, shifts_df: pd.DataFrame, only_empty: b
  
 # ---------- UI ----------
  
-st.markdown("""
-<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
-<style>
-/* ── BASE ── */
+st.markdown(
+"<link href='https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap' rel='stylesheet'>",
+unsafe_allow_html=True)
+ 
+st.markdown("""<style>
 html, body, [class*="css"] {
     font-family: 'DM Sans', sans-serif !important;
 }
  
-/* ── FONDO GENERAL ── */
 .stApp {
     background-color: #F7F6F2 !important;
 }
@@ -309,7 +309,6 @@ section[data-testid="stSidebar"] {
     background-color: #F0EFE9 !important;
 }
  
-/* ── TÍTULO PRINCIPAL ── */
 h1 {
     font-family: 'DM Serif Display', serif !important;
     font-size: 2.4rem !important;
@@ -319,7 +318,6 @@ h1 {
     padding-bottom: 0.1rem !important;
 }
  
-/* ── SUBTÍTULOS ── */
 h2, h3 {
     font-family: 'DM Serif Display', serif !important;
     font-weight: 400 !important;
@@ -329,7 +327,6 @@ h2, h3 {
 h2 { font-size: 1.5rem !important; }
 h3 { font-size: 1.2rem !important; }
  
-/* ── TABS ── */
 button[data-baseweb="tab"] {
     font-family: 'DM Sans', sans-serif !important;
     font-size: 0.88rem !important;
@@ -352,7 +349,6 @@ button[aria-selected="true"][data-baseweb="tab"] {
     background: transparent !important;
 }
  
-/* ── BOTÓN PRIMARIO ── */
 button[kind="primary"], .stButton > button[kind="primary"] {
     background-color: #2D5A35 !important;
     color: #F7F6F2 !important;
@@ -369,7 +365,6 @@ button[kind="primary"]:hover {
     background-color: #1C3D22 !important;
 }
  
-/* ── BOTÓN SECUNDARIO ── */
 .stButton > button {
     background-color: #ECEAE3 !important;
     color: #1C2B1E !important;
@@ -385,7 +380,6 @@ button[kind="primary"]:hover {
     border-color: #B8B4A8 !important;
 }
  
-/* ── INPUTS ── */
 input[type="text"], input[type="number"],
 .stTextInput > div > div > input,
 .stNumberInput > div > div > input {
@@ -403,7 +397,6 @@ input:focus {
     outline: none !important;
 }
  
-/* ── SELECTBOX / MULTISELECT ── */
 .stSelectbox > div > div,
 .stMultiSelect > div > div {
     background-color: #FFFFFF !important;
@@ -413,7 +406,6 @@ input:focus {
     font-size: 0.9rem !important;
 }
  
-/* ── DATE INPUT ── */
 .stDateInput > div > div > input {
     background-color: #FFFFFF !important;
     border: 1px solid #D4D1C7 !important;
@@ -421,7 +413,6 @@ input:focus {
     font-family: 'DM Sans', sans-serif !important;
 }
  
-/* ── DATAFRAME / TABLA ── */
 .stDataFrame {
     border: 1px solid #E2DFD8 !important;
     border-radius: 8px !important;
@@ -449,7 +440,6 @@ input:focus {
     background-color: #F0EFE9 !important;
 }
  
-/* ── MÉTRICAS ── */
 [data-testid="metric-container"] {
     background-color: #FFFFFF !important;
     border: 1px solid #E2DFD8 !important;
@@ -476,7 +466,6 @@ input:focus {
     color: #2D5A35 !important;
 }
  
-/* ── ALERTS / MENSAJES ── */
 .stSuccess > div {
     background-color: #EAF2EB !important;
     border-left: 3px solid #2D5A35 !important;
@@ -510,7 +499,6 @@ input:focus {
     font-size: 0.88rem !important;
 }
  
-/* ── EXPANDER ── */
 .streamlit-expanderHeader {
     font-family: 'DM Sans', sans-serif !important;
     font-weight: 500 !important;
@@ -520,27 +508,23 @@ input:focus {
     border-radius: 6px !important;
 }
  
-/* ── CHECKBOX ── */
 .stCheckbox label {
     font-family: 'DM Sans', sans-serif !important;
     font-size: 0.88rem !important;
     color: #2C3E2E !important;
 }
  
-/* ── CAPTION / SMALL TEXT ── */
 .stCaption, small, .stMarkdown p small {
     font-family: 'DM Sans', sans-serif !important;
     color: #8A9E8C !important;
     font-size: 0.8rem !important;
 }
  
-/* ── DIVIDER ── */
 hr {
     border-color: #E2DFD8 !important;
     margin: 1.2rem 0 !important;
 }
  
-/* ── FORM ── */
 [data-testid="stForm"] {
     background-color: #FFFFFF !important;
     border: 1px solid #E2DFD8 !important;
@@ -548,12 +532,10 @@ hr {
     padding: 1.2rem !important;
 }
  
-/* ── SPINNER ── */
 .stSpinner > div {
     border-top-color: #2D5A35 !important;
 }
  
-/* ── SCROLLBAR ── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: #F0EFE9; }
 ::-webkit-scrollbar-thumb { background: #C8C4BA; border-radius: 3px; }
