@@ -292,13 +292,291 @@ def auto_assign_month(target_month: date, shifts_df: pd.DataFrame, only_empty: b
  
  
 # ---------- UI ----------
-st.title("🧾 Turnos Farmacia")
  
-tab1, tab2, tab3 = st.tabs(["👥 Personas", "🗓️ Calendario mensual", "📊 Dashboard mensual"])
+st.markdown("""
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ── BASE ── */
+html, body, [class*="css"] {
+    font-family: 'DM Sans', sans-serif !important;
+}
+ 
+/* ── FONDO GENERAL ── */
+.stApp {
+    background-color: #F7F6F2 !important;
+}
+section[data-testid="stSidebar"] {
+    background-color: #F0EFE9 !important;
+}
+ 
+/* ── TÍTULO PRINCIPAL ── */
+h1 {
+    font-family: 'DM Serif Display', serif !important;
+    font-size: 2.4rem !important;
+    font-weight: 400 !important;
+    color: #1C2B1E !important;
+    letter-spacing: -0.02em !important;
+    padding-bottom: 0.1rem !important;
+}
+ 
+/* ── SUBTÍTULOS ── */
+h2, h3 {
+    font-family: 'DM Serif Display', serif !important;
+    font-weight: 400 !important;
+    color: #1C2B1E !important;
+    letter-spacing: -0.01em !important;
+}
+h2 { font-size: 1.5rem !important; }
+h3 { font-size: 1.2rem !important; }
+ 
+/* ── TABS ── */
+button[data-baseweb="tab"] {
+    font-family: 'DM Sans', sans-serif !important;
+    font-size: 0.88rem !important;
+    font-weight: 500 !important;
+    letter-spacing: 0.04em !important;
+    text-transform: uppercase !important;
+    color: #7A8C7C !important;
+    border-radius: 0 !important;
+    padding: 0.6rem 1.2rem !important;
+    border-bottom: 2px solid transparent !important;
+    transition: all 0.2s ease !important;
+}
+button[data-baseweb="tab"]:hover {
+    color: #2D5A35 !important;
+    background: transparent !important;
+}
+button[aria-selected="true"][data-baseweb="tab"] {
+    color: #2D5A35 !important;
+    border-bottom: 2px solid #2D5A35 !important;
+    background: transparent !important;
+}
+ 
+/* ── BOTÓN PRIMARIO ── */
+button[kind="primary"], .stButton > button[kind="primary"] {
+    background-color: #2D5A35 !important;
+    color: #F7F6F2 !important;
+    border: none !important;
+    border-radius: 6px !important;
+    font-family: 'DM Sans', sans-serif !important;
+    font-weight: 500 !important;
+    font-size: 0.875rem !important;
+    letter-spacing: 0.02em !important;
+    padding: 0.5rem 1.4rem !important;
+    transition: background 0.2s ease !important;
+}
+button[kind="primary"]:hover {
+    background-color: #1C3D22 !important;
+}
+ 
+/* ── BOTÓN SECUNDARIO ── */
+.stButton > button {
+    background-color: #ECEAE3 !important;
+    color: #1C2B1E !important;
+    border: 1px solid #D4D1C7 !important;
+    border-radius: 6px !important;
+    font-family: 'DM Sans', sans-serif !important;
+    font-weight: 400 !important;
+    font-size: 0.875rem !important;
+    transition: all 0.2s ease !important;
+}
+.stButton > button:hover {
+    background-color: #DDD9CF !important;
+    border-color: #B8B4A8 !important;
+}
+ 
+/* ── INPUTS ── */
+input[type="text"], input[type="number"],
+.stTextInput > div > div > input,
+.stNumberInput > div > div > input {
+    background-color: #FFFFFF !important;
+    border: 1px solid #D4D1C7 !important;
+    border-radius: 6px !important;
+    font-family: 'DM Sans', sans-serif !important;
+    font-size: 0.9rem !important;
+    color: #1C2B1E !important;
+    transition: border 0.15s ease !important;
+}
+input:focus {
+    border-color: #2D5A35 !important;
+    box-shadow: 0 0 0 2px rgba(45,90,53,0.12) !important;
+    outline: none !important;
+}
+ 
+/* ── SELECTBOX / MULTISELECT ── */
+.stSelectbox > div > div,
+.stMultiSelect > div > div {
+    background-color: #FFFFFF !important;
+    border: 1px solid #D4D1C7 !important;
+    border-radius: 6px !important;
+    font-family: 'DM Sans', sans-serif !important;
+    font-size: 0.9rem !important;
+}
+ 
+/* ── DATE INPUT ── */
+.stDateInput > div > div > input {
+    background-color: #FFFFFF !important;
+    border: 1px solid #D4D1C7 !important;
+    border-radius: 6px !important;
+    font-family: 'DM Sans', sans-serif !important;
+}
+ 
+/* ── DATAFRAME / TABLA ── */
+.stDataFrame {
+    border: 1px solid #E2DFD8 !important;
+    border-radius: 8px !important;
+    overflow: hidden !important;
+}
+.stDataFrame thead tr th {
+    background-color: #ECEAE3 !important;
+    color: #4A5C4C !important;
+    font-family: 'DM Sans', sans-serif !important;
+    font-weight: 600 !important;
+    font-size: 0.78rem !important;
+    letter-spacing: 0.06em !important;
+    text-transform: uppercase !important;
+    border-bottom: 1px solid #D4D1C7 !important;
+    padding: 10px 14px !important;
+}
+.stDataFrame tbody tr td {
+    font-family: 'DM Sans', sans-serif !important;
+    font-size: 0.88rem !important;
+    color: #2C3E2E !important;
+    padding: 9px 14px !important;
+    border-bottom: 1px solid #F0EFE9 !important;
+}
+.stDataFrame tbody tr:hover td {
+    background-color: #F0EFE9 !important;
+}
+ 
+/* ── MÉTRICAS ── */
+[data-testid="metric-container"] {
+    background-color: #FFFFFF !important;
+    border: 1px solid #E2DFD8 !important;
+    border-radius: 10px !important;
+    padding: 1rem 1.2rem !important;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04) !important;
+}
+[data-testid="metric-container"] label {
+    font-family: 'DM Sans', sans-serif !important;
+    font-size: 0.75rem !important;
+    font-weight: 500 !important;
+    letter-spacing: 0.06em !important;
+    text-transform: uppercase !important;
+    color: #7A8C7C !important;
+}
+[data-testid="metric-container"] [data-testid="stMetricValue"] {
+    font-family: 'DM Serif Display', serif !important;
+    font-size: 2rem !important;
+    color: #1C2B1E !important;
+}
+[data-testid="metric-container"] [data-testid="stMetricDelta"] {
+    font-size: 0.78rem !important;
+    font-weight: 500 !important;
+    color: #2D5A35 !important;
+}
+ 
+/* ── ALERTS / MENSAJES ── */
+.stSuccess > div {
+    background-color: #EAF2EB !important;
+    border-left: 3px solid #2D5A35 !important;
+    border-radius: 6px !important;
+    color: #1C3D22 !important;
+    font-family: 'DM Sans', sans-serif !important;
+    font-size: 0.88rem !important;
+}
+.stWarning > div {
+    background-color: #FDF6E8 !important;
+    border-left: 3px solid #C8941A !important;
+    border-radius: 6px !important;
+    color: #7A5A10 !important;
+    font-family: 'DM Sans', sans-serif !important;
+    font-size: 0.88rem !important;
+}
+.stError > div {
+    background-color: #FCECEA !important;
+    border-left: 3px solid #C0392B !important;
+    border-radius: 6px !important;
+    color: #7A1F1A !important;
+    font-family: 'DM Sans', sans-serif !important;
+    font-size: 0.88rem !important;
+}
+.stInfo > div {
+    background-color: #EEF3F8 !important;
+    border-left: 3px solid #3B7ABF !important;
+    border-radius: 6px !important;
+    color: #1E3D5C !important;
+    font-family: 'DM Sans', sans-serif !important;
+    font-size: 0.88rem !important;
+}
+ 
+/* ── EXPANDER ── */
+.streamlit-expanderHeader {
+    font-family: 'DM Sans', sans-serif !important;
+    font-weight: 500 !important;
+    font-size: 0.88rem !important;
+    color: #4A5C4C !important;
+    background-color: #F0EFE9 !important;
+    border-radius: 6px !important;
+}
+ 
+/* ── CHECKBOX ── */
+.stCheckbox label {
+    font-family: 'DM Sans', sans-serif !important;
+    font-size: 0.88rem !important;
+    color: #2C3E2E !important;
+}
+ 
+/* ── CAPTION / SMALL TEXT ── */
+.stCaption, small, .stMarkdown p small {
+    font-family: 'DM Sans', sans-serif !important;
+    color: #8A9E8C !important;
+    font-size: 0.8rem !important;
+}
+ 
+/* ── DIVIDER ── */
+hr {
+    border-color: #E2DFD8 !important;
+    margin: 1.2rem 0 !important;
+}
+ 
+/* ── FORM ── */
+[data-testid="stForm"] {
+    background-color: #FFFFFF !important;
+    border: 1px solid #E2DFD8 !important;
+    border-radius: 10px !important;
+    padding: 1.2rem !important;
+}
+ 
+/* ── SPINNER ── */
+.stSpinner > div {
+    border-top-color: #2D5A35 !important;
+}
+ 
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #F0EFE9; }
+::-webkit-scrollbar-thumb { background: #C8C4BA; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #A8A49A; }
+</style>
+""", unsafe_allow_html=True)
+ 
+st.markdown("""
+<div style="display:flex; align-items:baseline; gap:12px; margin-bottom:0.2rem;">
+  <span style="font-family:'DM Serif Display',serif; font-size:2.4rem; color:#1C2B1E; letter-spacing:-0.02em; font-weight:400;">
+    Turnos Farmacia
+  </span>
+  <span style="font-family:'DM Sans',sans-serif; font-size:0.78rem; font-weight:500; letter-spacing:0.1em; text-transform:uppercase; color:#7A8C7C; padding-bottom:6px;">
+    gestión de personal
+  </span>
+</div>
+""", unsafe_allow_html=True)
+ 
+tab1, tab2, tab3 = st.tabs(["Personas", "Calendario mensual", "Dashboard mensual"])
  
 # ===================== TAB 1: PERSONAS =====================
 with tab1:
-    st.subheader("Personas (crear, editar, desactivar)")
+    st.subheader("Equipo")
  
     colA, colB = st.columns([1, 2], gap="large")
  
@@ -383,8 +661,8 @@ with tab1:
  
 # ===================== TAB 2: CALENDARIO MENSUAL =====================
 with tab2:
-    st.subheader("Calendario mensual (vista tipo Outlook)")
-    st.caption("En cada día verás 2 bloques (M/T). Pulsa en un bloque para editarlo en el panel de la derecha.")
+    st.subheader("Calendario mensual")
+    st.caption("Pulsa en un bloque del calendario para editar ese turno en el panel de la derecha.")
  
     shifts = get_active_shifts()
     if shifts.empty:
@@ -622,8 +900,8 @@ with tab2:
  
 # ===================== TAB 3: DASHBOARD =====================
 with tab3:
-    st.subheader("Dashboard (horas reales por persona)")
-    st.caption("Cuenta horas según asignaciones ACTIVAS en el rango de fechas elegido.")
+    st.subheader("Dashboard")
+    st.caption("Horas y cobertura según asignaciones activas en el rango seleccionado.")
  
     c1, c2, c3 = st.columns([1, 1, 2])
     with c1:
