@@ -1,3 +1,6 @@
+
+Copiar
+
 import streamlit as st
 import pandas as pd
 from streamlit_calendar import calendar
@@ -298,8 +301,12 @@ st.markdown(
 unsafe_allow_html=True)
  
 st.markdown("""<style>
-html, body, [class*="css"] {
+.stApp, .stApp * {
     font-family: 'DM Sans', sans-serif !important;
+}
+ 
+.stApp iframe, .stApp iframe * {
+    font-family: inherit;
 }
  
 .stApp {
@@ -540,6 +547,18 @@ hr {
 ::-webkit-scrollbar-track { background: #F0EFE9; }
 ::-webkit-scrollbar-thumb { background: #C8C4BA; border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: #A8A49A; }
+ 
+iframe[title="streamlit_calendar.streamlit_calendar"] {
+    min-height: 800px !important;
+    width: 100% !important;
+    border: none !important;
+    background: transparent !important;
+}
+ 
+[data-testid="stIFrame"] {
+    min-height: 800px !important;
+    width: 100% !important;
+}
 </style>
 """, unsafe_allow_html=True)
  
@@ -654,7 +673,7 @@ with tab2:
     pick = st.date_input("Mes", value=date.today(), key="cal_month")
     start, end = month_range(pick)
  
-    # ── AUTOASIGNACIÓN ──────────────────────────────────────────────
+    # --- AUTOASIGNACION ---
     st.divider()
     with st.container():
         col_auto1, col_auto2, col_auto3 = st.columns([2, 1, 2])
@@ -703,7 +722,7 @@ with tab2:
             st.rerun()
  
     st.divider()
-    # ────────────────────────────────────────────────────────────────
+    # ---
  
     col_cal, col_edit = st.columns([3, 2], gap="large")
  
@@ -896,7 +915,7 @@ with tab3:
     if dash_end < dash_start:
         st.error("La fecha 'Fin' no puede ser anterior a 'Inicio'.")
     else:
-        # ── ALERTAS DE COBERTURA ──────────────────────────────────────
+        # --- ALERTAS DE COBERTURA ---
         st.markdown("### 🚨 Alertas de cobertura")
         st.caption("Turnos con personal insuficiente respecto al mínimo requerido.")
  
@@ -1009,7 +1028,7 @@ with tab3:
  
         st.divider()
  
-        # ── HORAS POR PERSONA ─────────────────────────────────────────
+        # --- HORAS POR PERSONA ---
         try:
             df_h = read_df("""
                 select
