@@ -4,9 +4,9 @@ import json
 from datetime import date, timedelta
 from sqlalchemy import create_engine, text
 import streamlit.components.v1 as components
- 
+
 st.set_page_config(page_title="Turnos Farmacia", layout="wide")
- 
+
 # =============================================================================
 # CAPA DE DATOS
 # Convención de caché:
@@ -17,34 +17,34 @@ st.set_page_config(page_title="Turnos Farmacia", layout="wide")
 # Todas las funciones de escritura llaman a _invalidate_caches() al final
 # para forzar que la siguiente lectura vaya a la BD y no devuelva datos viejos.
 # =============================================================================
- 
+
 # ---------- Conexión ----------
- 
+
 @st.cache_resource
 def engine():
     if "DATABASE_URL" not in st.secrets:
         raise KeyError("Falta DATABASE_URL en Secrets (Streamlit Cloud → Settings → Secrets)")
     return create_engine(st.secrets["DATABASE_URL"], pool_pre_ping=True)
- 
+
 eng = engine()
- 
+
 def read_df(sql, params=None):
     with eng.connect() as c:
         return pd.read_sql(text(sql), c, params=params or {})
- 
+
 def exec_sql(sql, params=None):
     with eng.begin() as c:
         c.execute(text(sql), params or {})
- 
+
 def _invalidate_caches():
     """Limpia las cachés estáticas tras cualquier escritura en BD."""
     get_active_shifts.clear()
     get_active_employees.clear()
- 
+
 # ---------- Helpers ----------
- 
+
 ISO_DOW = {1:"Lun",2:"Mar",3:"Mié",4:"Jue",5:"Vie",6:"Sáb",7:"Dom"}
- 
+
 def month_range(any_day_in_month: date):
     start = any_day_in_month.replace(day=1)
     if start.month == 12:
@@ -52,18 +52,18 @@ def month_range(any_day_in_month: date):
     else:
         end = date(start.year, start.month + 1, 1)
     return start, end
- 
+
 def month_start(d: date) -> date:
     return d.replace(day=1)
- 
+
 def next_month_start(d: date) -> date:
     ms = month_start(d)
     if ms.month == 12:
         return date(ms.year + 1, 1, 1)
     return date(ms.year, ms.month + 1, 1)
- 
+
 # ---------- Lecturas con caché (solo funciones sin parámetros date) ----------
- 
+
 @st.cache_data(ttl=300)
 def get_active_shifts():
     """Turnos activos. Cambian rarísimo → TTL 5 min."""
@@ -73,7 +73,7 @@ def get_active_shifts():
         where active=true
         order by start_time
     """)
- 
+
 @st.cache_data(ttl=300)
 def get_active_employees():
     """Empleadas activas. Cambian rarísimo → TTL 5 min."""
@@ -83,9 +83,9 @@ def get_active_employees():
         where active=true
         order by full_name
     """)
- 
+
 # ---------- Lecturas operativas (sin caché, date no es hasheable de forma fiable) ----------
- 
+
 def get_effective_availability_all(work_date: date, iso_dow: int, shift_id: str):
     return read_df("""
         select
@@ -106,7 +106,7 @@ def get_effective_availability_all(work_date: date, iso_dow: int, shift_id: str)
         where e.active=true
         order by e.full_name
     """, {"dt": str(work_date), "dow": iso_dow, "shift": shift_id})
- 
+
 def available_employees_for_date_shift(work_date: date, iso_dow: int, shift_id: str):
     return read_df("""
         select e.id, e.full_name
@@ -125,7 +125,7 @@ def available_employees_for_date_shift(work_date: date, iso_dow: int, shift_id: 
           and coalesce(o.available, w.available, true) = true
         order by e.full_name
     """, {"dt": str(work_date), "dow": iso_dow, "shift": shift_id})
- 
+
 def get_assignments(work_date: date, shift_id: str):
     return read_df("""
         select a.id as assignment_id, a.employee_id, a.active, e.full_name
@@ -134,7 +134,7 @@ def get_assignments(work_date: date, shift_id: str):
         where a.work_date=:dt and a.shift_type_id=:shift
         order by e.full_name
     """, {"dt": str(work_date), "shift": shift_id})
- 
+
 def get_monthly_shift_counts(month_start_date: date, month_end_date: date) -> dict:
     df = read_df("""
         select employee_id, count(*) as cnt
@@ -146,9 +146,9 @@ def get_monthly_shift_counts(month_start_date: date, month_end_date: date) -> di
     if df.empty:
         return {}
     return dict(zip(df["employee_id"].tolist(), df["cnt"].tolist()))
- 
+
 # ---------- Escrituras (invalidan caché tras ejecutar) ----------
- 
+
 def upsert_override(emp_id: str, work_date: date, shift_id: str, available: bool, reason: str = ""):
     exec_sql("""
         insert into employee_availability_overrides (employee_id, work_date, shift_type_id, available, reason)
@@ -158,7 +158,7 @@ def upsert_override(emp_id: str, work_date: date, shift_id: str, available: bool
                       reason = excluded.reason
     """, {"e": emp_id, "dt": str(work_date), "s": shift_id, "a": available, "r": reason})
     _invalidate_caches()
- 
+
 def upsert_weekly_availability(emp_id, iso_dow, shift_id, available):
     exec_sql("""
         insert into employee_weekly_availability (employee_id, iso_dow, shift_type_id, available)
@@ -167,7 +167,7 @@ def upsert_weekly_availability(emp_id, iso_dow, shift_id, available):
         do update set available = excluded.available
     """, {"e": emp_id, "d": iso_dow, "s": shift_id, "a": available})
     _invalidate_caches()
- 
+
 def set_assignment_active(assignment_id: str, active: bool):
     exec_sql("""
         update shift_assignments
@@ -175,28 +175,28 @@ def set_assignment_active(assignment_id: str, active: bool):
         where id=:id
     """, {"a": active, "id": assignment_id})
     _invalidate_caches()
- 
+
 def is_month_closed(ms: date) -> bool:
     df = read_df("select month_start from month_closures where month_start=:m", {"m": str(ms)})
     return not df.empty
- 
+
 def close_month(ms: date, closed_by: str = ""):
     exec_sql("""
         insert into month_closures (month_start, closed_by)
         values (:m, :by)
         on conflict (month_start) do nothing
     """, {"m": str(ms), "by": closed_by})
- 
+
 def apply_assignments(work_date: date, iso_dow: int, shift_id: str, selected_employee_ids: list):
     existing = read_df("""
         select employee_id, id as assignment_id
         from shift_assignments
         where work_date=:dt and shift_type_id=:shift
     """, {"dt": str(work_date), "shift": shift_id})
- 
+
     existing_ids = set(existing["employee_id"].tolist()) if not existing.empty else set()
     selected_ids = set(selected_employee_ids)
- 
+
     for emp_id in selected_ids:
         exec_sql("""
             insert into shift_assignments (work_date, iso_dow, shift_type_id, employee_id, active)
@@ -204,7 +204,7 @@ def apply_assignments(work_date: date, iso_dow: int, shift_id: str, selected_emp
             on conflict (work_date, shift_type_id, employee_id)
             do update set active=true
         """, {"dt": str(work_date), "dow": iso_dow, "shift": shift_id, "emp": emp_id})
- 
+
     to_deactivate = list(existing_ids - selected_ids)
     if to_deactivate:
         exec_sql("""
@@ -213,29 +213,29 @@ def apply_assignments(work_date: date, iso_dow: int, shift_id: str, selected_emp
             where work_date=:dt and shift_type_id=:shift and employee_id = any(:arr)
         """, {"dt": str(work_date), "shift": shift_id, "arr": to_deactivate})
     _invalidate_caches()
- 
- 
+
+
 # ---------- AUTOASIGNACIÓN INTELIGENTE ----------
- 
- 
+
+
 def auto_assign_month(target_month: date, shifts_df: pd.DataFrame, only_empty: bool = True):
     """
     Recorre todos los días del mes y asigna automáticamente cada turno.
- 
+
     Criterio de selección:
       - Solo personas disponibles (disponibilidad semanal + overrides + sin vacaciones).
       - Ordenadas por turnos acumulados en el mes (menor carga primero).
       - Se asignan las primeras `required_staff` personas de esa lista.
       - Si ya hay asignaciones activas en ese turno/día y only_empty=True, se salta.
- 
+
     Devuelve un dict con estadísticas del resultado.
     """
     start, end = month_range(target_month)
     stats = {"cubiertos": 0, "parciales": 0, "sin_personal": 0, "saltados": 0, "total": 0}
- 
+
     # Contadores en memoria para ir actualizando la carga dentro del mismo proceso
     shift_counts = get_monthly_shift_counts(start, end)
- 
+
     d = start
     while d < end:
         iso_dow = d.isoweekday()
@@ -243,7 +243,7 @@ def auto_assign_month(target_month: date, shifts_df: pd.DataFrame, only_empty: b
             shift_id = str(sh.id)
             req = int(sh.required_staff)
             stats["total"] += 1
- 
+
             # Si only_empty, saltar días que ya tienen asignaciones activas
             if only_empty:
                 existing = read_df("""
@@ -253,21 +253,21 @@ def auto_assign_month(target_month: date, shifts_df: pd.DataFrame, only_empty: b
                 if not existing.empty and int(existing.iloc[0]["cnt"]) > 0:
                     stats["saltados"] += 1
                     continue
- 
+
             # Personas disponibles para este día/turno
             avail = available_employees_for_date_shift(d, iso_dow, shift_id)
             if avail.empty:
                 stats["sin_personal"] += 1
                 continue
- 
+
             # Ordenar por carga acumulada en el mes (menor primero), desempate por nombre
             avail["_load"] = avail["id"].apply(lambda eid: shift_counts.get(str(eid), 0))
             avail = avail.sort_values(["_load", "full_name"]).reset_index(drop=True)
- 
+
             # Seleccionar hasta required_staff
             selected = avail.head(req)
             selected_ids = [str(eid) for eid in selected["id"].tolist()]
- 
+
             # Aplicar asignaciones
             for emp_id in selected_ids:
                 exec_sql("""
@@ -278,42 +278,42 @@ def auto_assign_month(target_month: date, shifts_df: pd.DataFrame, only_empty: b
                 """, {"dt": str(d), "dow": iso_dow, "shift": shift_id, "emp": emp_id})
                 # Actualizar contador en memoria
                 shift_counts[emp_id] = shift_counts.get(emp_id, 0) + 1
- 
+
             # Estadísticas
             if len(selected_ids) >= req:
                 stats["cubiertos"] += 1
             else:
                 stats["parciales"] += 1
- 
+
         d += timedelta(days=1)
- 
+
     # Invalidar caché una sola vez al terminar todo el proceso de escritura
     _invalidate_caches()
     return stats
- 
- 
+
+
 # ---------- UI ----------
- 
+
 st.markdown(
 "<link href='https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap' rel='stylesheet'>",
 unsafe_allow_html=True)
- 
+
 st.markdown("""<style>
 .stApp, .stApp * {
     font-family: 'DM Sans', sans-serif !important;
 }
- 
+
 .stApp iframe, .stApp iframe * {
     font-family: inherit;
 }
- 
+
 .stApp {
     background-color: #F7F6F2 !important;
 }
 section[data-testid="stSidebar"] {
     background-color: #F0EFE9 !important;
 }
- 
+
 h1 {
     font-family: 'DM Serif Display', serif !important;
     font-size: 2.4rem !important;
@@ -322,7 +322,7 @@ h1 {
     letter-spacing: -0.02em !important;
     padding-bottom: 0.1rem !important;
 }
- 
+
 h2, h3 {
     font-family: 'DM Serif Display', serif !important;
     font-weight: 400 !important;
@@ -331,7 +331,7 @@ h2, h3 {
 }
 h2 { font-size: 1.5rem !important; }
 h3 { font-size: 1.2rem !important; }
- 
+
 button[data-baseweb="tab"] {
     font-family: 'DM Sans', sans-serif !important;
     font-size: 0.88rem !important;
@@ -353,7 +353,7 @@ button[aria-selected="true"][data-baseweb="tab"] {
     border-bottom: 2px solid #2D5A35 !important;
     background: transparent !important;
 }
- 
+
 button[kind="primary"], .stButton > button[kind="primary"] {
     background-color: #2D5A35 !important;
     color: #F7F6F2 !important;
@@ -369,7 +369,7 @@ button[kind="primary"], .stButton > button[kind="primary"] {
 button[kind="primary"]:hover {
     background-color: #1C3D22 !important;
 }
- 
+
 .stButton > button {
     background-color: #ECEAE3 !important;
     color: #1C2B1E !important;
@@ -384,7 +384,7 @@ button[kind="primary"]:hover {
     background-color: #DDD9CF !important;
     border-color: #B8B4A8 !important;
 }
- 
+
 input[type="text"], input[type="number"],
 .stTextInput > div > div > input,
 .stNumberInput > div > div > input {
@@ -401,7 +401,7 @@ input:focus {
     box-shadow: 0 0 0 2px rgba(45,90,53,0.12) !important;
     outline: none !important;
 }
- 
+
 .stSelectbox > div > div,
 .stMultiSelect > div > div {
     background-color: #FFFFFF !important;
@@ -410,14 +410,14 @@ input:focus {
     font-family: 'DM Sans', sans-serif !important;
     font-size: 0.9rem !important;
 }
- 
+
 .stDateInput > div > div > input {
     background-color: #FFFFFF !important;
     border: 1px solid #D4D1C7 !important;
     border-radius: 6px !important;
     font-family: 'DM Sans', sans-serif !important;
 }
- 
+
 .stDataFrame {
     border: 1px solid #E2DFD8 !important;
     border-radius: 8px !important;
@@ -444,7 +444,7 @@ input:focus {
 .stDataFrame tbody tr:hover td {
     background-color: #F0EFE9 !important;
 }
- 
+
 [data-testid="metric-container"] {
     background-color: #FFFFFF !important;
     border: 1px solid #E2DFD8 !important;
@@ -470,7 +470,7 @@ input:focus {
     font-weight: 500 !important;
     color: #2D5A35 !important;
 }
- 
+
 .stSuccess > div {
     background-color: #EAF2EB !important;
     border-left: 3px solid #2D5A35 !important;
@@ -503,7 +503,7 @@ input:focus {
     font-family: 'DM Sans', sans-serif !important;
     font-size: 0.88rem !important;
 }
- 
+
 .streamlit-expanderHeader {
     font-family: 'DM Sans', sans-serif !important;
     font-weight: 500 !important;
@@ -512,54 +512,54 @@ input:focus {
     background-color: #F0EFE9 !important;
     border-radius: 6px !important;
 }
- 
+
 .stCheckbox label {
     font-family: 'DM Sans', sans-serif !important;
     font-size: 0.88rem !important;
     color: #2C3E2E !important;
 }
- 
+
 .stCaption, small, .stMarkdown p small {
     font-family: 'DM Sans', sans-serif !important;
     color: #8A9E8C !important;
     font-size: 0.8rem !important;
 }
- 
+
 hr {
     border-color: #E2DFD8 !important;
     margin: 1.2rem 0 !important;
 }
- 
+
 [data-testid="stForm"] {
     background-color: #FFFFFF !important;
     border: 1px solid #E2DFD8 !important;
     border-radius: 10px !important;
     padding: 1.2rem !important;
 }
- 
+
 .stSpinner > div {
     border-top-color: #2D5A35 !important;
 }
- 
+
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: #F0EFE9; }
 ::-webkit-scrollbar-thumb { background: #C8C4BA; border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: #A8A49A; }
- 
+
 iframe[title="streamlit_calendar.streamlit_calendar"] {
     min-height: 800px !important;
     width: 100% !important;
     border: none !important;
     background: transparent !important;
 }
- 
+
 [data-testid="stIFrame"] {
     min-height: 800px !important;
     width: 100% !important;
 }
 </style>
 """, unsafe_allow_html=True)
- 
+
 st.markdown("""
 <div style="display:flex; align-items:baseline; gap:12px; margin-bottom:0.2rem;">
   <span style="font-family:'DM Serif Display',serif; font-size:2.4rem; color:#1C2B1E; letter-spacing:-0.02em; font-weight:400;">
@@ -570,15 +570,15 @@ st.markdown("""
   </span>
 </div>
 """, unsafe_allow_html=True)
- 
+
 tab1, tab2, tab3 = st.tabs(["Personas", "Calendario mensual", "Dashboard mensual"])
- 
+
 # ===================== TAB 1: PERSONAS =====================
 with tab1:
     st.subheader("Equipo")
- 
+
     colA, colB = st.columns([1, 2], gap="large")
- 
+
     with colA:
         with st.form("add_person", clear_on_submit=True):
             name = st.text_input("Nombre")
@@ -590,21 +590,21 @@ with tab1:
                     values (:n, :r, true)
                 """, {"n": name.strip(), "r": role})
                 st.success("Persona creada.")
- 
+
     df_all = read_df("select id, full_name, role, active from employees order by full_name")
     if df_all.empty:
         st.info("Aún no hay personas.")
     else:
         with colB:
             st.dataframe(df_all[["full_name","role","active"]], use_container_width=True, hide_index=True)
- 
+
         st.divider()
         st.subheader("Editar / Desactivar persona")
         names = df_all["full_name"].tolist()
         sel = st.selectbox("Selecciona persona", names)
         sel_row = df_all[df_all["full_name"] == sel].iloc[0]
         sel_id = sel_row["id"]
- 
+
         c1, c2, c3 = st.columns([2, 1, 1])
         with c1:
             new_name = st.text_input("Nombre (editar)", value=sel_row["full_name"])
@@ -612,7 +612,7 @@ with tab1:
             new_role = st.selectbox("Rol", ["empleada","encargada"], index=0 if sel_row["role"]=="empleada" else 1)
         with c3:
             new_active = st.checkbox("Activa", value=bool(sel_row["active"]))
- 
+
         if st.button("💾 Guardar cambios"):
             exec_sql("""
                 update employees
@@ -621,10 +621,10 @@ with tab1:
             """, {"n": new_name.strip(), "r": new_role, "a": new_active, "id": sel_id})
             st.success("Guardado. Recarga si no ves cambios.")
             st.rerun()
- 
+
         st.divider()
         st.subheader("Disponibilidad semanal (día + turno)")
- 
+
         shifts = get_active_shifts()
         if shifts.empty:
             st.warning("No hay turnos activos en shift_types.")
@@ -636,19 +636,19 @@ with tab1:
                         values (:e, :d, :s, true)
                         on conflict (employee_id, iso_dow, shift_type_id) do nothing
                     """, {"e": sel_id, "d": dow, "s": sh["id"]})
- 
+
             current = read_df("""
                 select iso_dow, shift_type_id, available
                 from employee_weekly_availability
                 where employee_id=:e
             """, {"e": sel_id})
- 
+
             st.caption("Marca lo que normalmente puede hacer esta persona.")
- 
+
             for dow in range(1, 8):
                 row_cols = st.columns([1] + [2]*len(shifts))
                 row_cols[0].write(f"**{ISO_DOW[dow]}**")
- 
+
                 for i, sh in enumerate(shifts.itertuples(index=False), start=1):
                     val = current[(current["iso_dow"] == dow) & (current["shift_type_id"] == sh.id)]
                     cur = bool(val.iloc[0]["available"]) if not val.empty else True
@@ -657,32 +657,32 @@ with tab1:
                     if new != cur:
                         upsert_weekly_availability(sel_id, dow, sh.id, new)
                         st.toast("Disponibilidad guardada ✅")
- 
+
 # ===================== TAB 2: CALENDARIO MENSUAL =====================
 with tab2:
     st.subheader("Calendario mensual")
     st.caption("Pulsa en un bloque del calendario para editar ese turno en el panel de la derecha.")
- 
+
     shifts = get_active_shifts()
     if shifts.empty:
         st.warning("No hay turnos activos en shift_types.")
         st.stop()
- 
+
     pick = st.date_input("Mes", value=date.today(), key="cal_month")
     start, end = month_range(pick)
- 
+
     # --- AUTOASIGNACION ---
     st.divider()
     with st.container():
         col_auto1, col_auto2, col_auto3 = st.columns([2, 1, 2])
- 
+
         with col_auto1:
             st.markdown("#### 🤖 Autoasignación inteligente")
             st.caption(
                 "Asigna automáticamente el mes completo eligiendo, para cada turno, "
                 "las personas disponibles con menor carga acumulada en el mes."
             )
- 
+
         with col_auto2:
             only_empty = st.checkbox(
                 "Solo días vacíos",
@@ -690,7 +690,7 @@ with tab2:
                 help="Si está marcado, solo asigna turnos que aún no tienen ninguna persona asignada. "
                      "Si lo desmarco, puede sobreescribir asignaciones existentes."
             )
- 
+
         with col_auto3:
             st.write("")  # spacer
             run_auto = st.button(
@@ -699,11 +699,11 @@ with tab2:
                 use_container_width=True,
                 key="run_auto_assign"
             )
- 
+
         if run_auto:
             with st.spinner(f"Generando asignaciones para {pick.strftime('%B %Y')}…"):
                 result = auto_assign_month(pick, shifts, only_empty=only_empty)
- 
+
             total_procesados = result["total"] - result["saltados"]
             st.success(
                 f"✅ Autoasignación completada para **{pick.strftime('%B %Y')}**\n\n"
@@ -718,275 +718,213 @@ with tab2:
                     "Puedes asignarlos manualmente pulsando sobre ellos."
                 )
             st.rerun()
- 
+
     st.divider()
-    # --- CALENDARIO A ANCHO COMPLETO ---
-    col_cal, col_edit = st.columns([3, 2], gap="large")
- 
-    with col_cal:
-        df_ass = read_df("""
-            select a.work_date, a.shift_type_id, e.full_name
-            from shift_assignments a
-            join employees e on e.id=a.employee_id
-            where a.active=true and a.work_date >= :s and a.work_date < :e
-            order by a.work_date, a.shift_type_id, e.full_name
-        """, {"s": str(start), "e": str(end)})
- 
-        assigned_map = {}
-        if not df_ass.empty:
-            for (wd, sid), g in df_ass.groupby(["work_date", "shift_type_id"]):
-                assigned_map[(str(wd), str(sid))] = g["full_name"].tolist()
- 
-        # Build calendar data for HTML component
-        cal_days = []
-        d = start
-        while d < end:
-            iso = d.isoformat()
-            day_shifts = []
-            for sh in shifts.itertuples(index=False):
-                names = assigned_map.get((iso, str(sh.id)), [])
-                req = int(sh.required_staff)
-                count = len(names)
-                nm = str(sh.name).lower()
-                short_code = "M" if "mañ" in nm else ("T" if "tar" in nm else str(sh.code))
-                if count >= req:
-                    color = "#27ae60"
-                elif count == req - 1:
-                    color = "#e67e22"
-                else:
-                    color = "#e74c3c"
-                short_names_list = []
-                for n in names[:3]:
-                    # Handle "APELLIDO APELLIDO, NOMBRE" or "Nombre Apellido" formats
-                    clean = n.strip().replace(",", " ").split()
-                    first = clean[0].capitalize() if clean else ""
-                    if first:
-                        short_names_list.append(first)
-                short_names = ", ".join(short_names_list) if short_names_list else "sin asignar"
-                more = f" +{count-3}" if count > 3 else ""
-                day_shifts.append({
-                    "id": f"{iso}|{sh.id}",
-                    "code": short_code,
-                    "label": f"{short_names}{more}",
-                    "color": color,
-                })
-            cal_days.append({
-                "date": iso,
-                "day": d.day,
-                "dow": d.isoweekday(),
-                "shifts": day_shifts,
-            })
-            d += timedelta(days=1)
- 
-        # First day of week offset (Monday=1)
-        first_dow = start.isoweekday()  # 1=Mon..7=Sun
-        month_name = start.strftime("%B %Y")
- 
-        cal_data_json = json.dumps(cal_days)
- 
-        cal_html = f"""<!DOCTYPE html>
-<html><head><meta charset="utf-8"><style>
-*{{box-sizing:border-box;margin:0;padding:0}}
-body{{font-family:-apple-system,sans-serif;background:transparent}}
-.cal-title{{font-size:0.9rem;font-weight:600;color:#1C2B1E;padding:0 0 10px 0;display:block}}
-.cal-grid{{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;width:100%}}
-.cal-dow{{text-align:center;font-size:0.6rem;font-weight:700;letter-spacing:0.06em;
-    text-transform:uppercase;color:#7A8C7C;padding:3px 0 6px 0}}
-.cal-dow.we{{color:#b0a898}}
-.cal-cell{{background:#fff;border:1px solid #E8E5DE;border-radius:5px;
-    padding:4px;min-height:62px;cursor:pointer;overflow:hidden;
-    transition:border-color 0.12s,box-shadow 0.12s}}
-.cal-cell:hover{{border-color:#2D5A35;box-shadow:0 0 0 2px rgba(45,90,53,0.12)}}
-.cal-cell.empty{{background:transparent;border-color:transparent;cursor:default}}
-.cal-cell.today{{border-color:#2D5A35;border-width:2px}}
-.cal-cell.selected{{border-color:#2D5A35!important;border-width:2px!important;
-    box-shadow:0 0 0 3px rgba(45,90,53,0.2)!important}}
-.dn{{font-size:0.65rem;font-weight:700;color:#4A5C4C;text-align:right;margin-bottom:3px}}
-.cal-cell.today .dn{{color:#2D5A35}}
-.pill{{border-radius:3px;padding:1px 4px;font-size:0.58rem;font-weight:600;
-    color:#fff;margin-bottom:2px;white-space:nowrap;overflow:hidden;
-    text-overflow:ellipsis;display:block;line-height:1.5}}
-</style></head><body>
-<span class="cal-title">{month_name}</span>
-<div class="cal-grid" id="grid"></div>
-<script>
-const days={cal_data_json};
-const firstDow={first_dow};
-const today=new Date().toISOString().split('T')[0];
-const grid=document.getElementById('grid');
-['Lun','Mar','Mie','Jue','Vie','Sab','Dom'].forEach((d,i)=>{{
-  const el=document.createElement('div');
-  el.className='cal-dow'+(i>=5?' we':'');
-  el.textContent=d;grid.appendChild(el);
-}});
-for(let i=1;i<firstDow;i++){{
-  const el=document.createElement('div');el.className='cal-cell empty';grid.appendChild(el);
-}}
-days.forEach(day=>{{
-  const cell=document.createElement('div');
-  cell.className='cal-cell'+(day.date===today?' today':'');
-  cell.dataset.date=day.date;
-  const dn=document.createElement('div');dn.className='dn';dn.textContent=day.day;
-  cell.appendChild(dn);
-  day.shifts.forEach(sh=>{{
-    const p=document.createElement('span');p.className='pill';
-    p.style.background=sh.color;p.textContent=sh.code+': '+sh.label;
-    p.dataset.id=sh.id;cell.appendChild(p);
-  }});
-  cell.addEventListener('click',function(e){{
-    const p=e.target.closest('.pill');
-    const id=p?p.dataset.id:(day.shifts.length>0?day.shifts[0].id:null);
-    if(!id)return;
-    document.querySelectorAll('.cal-cell').forEach(c=>c.classList.remove('selected'));
-    cell.classList.add('selected');
-    window.parent.postMessage({{type:'cal_click',id:id}},'*');
-  }});
-  grid.appendChild(cell);
-}});
-</script></body></html>"""
-        components.html(cal_html, height=560, scrolling=False)
- 
-        # Handle calendar click via query params
-        click_id = st.query_params.get("cal_click", None)
-        if click_id:
-            try:
-                work_date_str, shift_id = click_id.split("|", 1)
-                st.session_state["selected_work_date"] = work_date_str
-                st.session_state["selected_shift_id"] = shift_id
-                st.query_params.clear()
-                st.rerun()
-            except Exception:
-                pass
- 
-        # Fallback: click via selectbox for reliability
-        st.caption("O selecciona directamente:")
-        all_options = []
-        d2 = start
-        while d2 < end:
-            for sh in shifts.itertuples(index=False):
-                nm = str(sh.name).lower()
-                short_code = "M" if "mañ" in nm else ("T" if "tar" in nm else str(sh.code))
-                label = f"{d2.strftime('%d/%m')} {short_code} — {sh.name}"
-                all_options.append((label, d2.isoformat(), str(sh.id)))
-            d2 += timedelta(days=1)
- 
-        sel_label = st.selectbox(
-            "Día y turno",
-            options=["(ninguno)"] + [o[0] for o in all_options],
-            key="cal_selectbox"
-        )
-        if sel_label != "(ninguno)":
-            chosen = next((o for o in all_options if o[0] == sel_label), None)
-            if chosen:
-                st.session_state["selected_work_date"] = chosen[1]
-                st.session_state["selected_shift_id"] = chosen[2]
- 
-    with col_edit:
-        st.markdown("### Editor del turno")
- 
-        if "selected_work_date" not in st.session_state or "selected_shift_id" not in st.session_state:
-            st.info("Pulsa en un bloque del calendario (M/T) para editarlo aquí.")
-        else:
-            if st.button("❌ Cerrar editor", key="close_editor"):
-                st.session_state.pop("selected_work_date", None)
-                st.session_state.pop("selected_shift_id", None)
-                st.rerun()
- 
-            work_date_str = st.session_state["selected_work_date"]
-            shift_id = st.session_state["selected_shift_id"]
- 
-            work_date = date.fromisoformat(work_date_str)
-            dow = int(work_date.isoweekday())
- 
-            match = shifts[shifts["id"].astype(str) == str(shift_id)]
-            if match.empty:
-                st.error("No pude identificar el turno seleccionado.")
-            else:
-                sh_row = match.iloc[0]
-                req = int(sh_row["required_staff"])
- 
-                st.write(f"**Fecha:** {work_date_str}")
-                st.write(f"**Turno:** {sh_row['name']} ({sh_row['start_time']}–{sh_row['end_time']})")
-                st.write(f"**Necesarias:** {req}")
- 
-                avail = available_employees_for_date_shift(work_date, dow, str(shift_id))
-                if avail.empty:
-                    st.warning("Nadie disponible según disponibilidad/vacaciones.")
-                else:
-                    avail_names = avail["full_name"].tolist()
-                    avail_map = dict(zip(avail_names, avail["id"].tolist()))
- 
-                    assigned = get_assignments(work_date, str(shift_id))
-                    assigned_active = (
-                        assigned[assigned["active"] == True]["full_name"].tolist()
-                        if not assigned.empty
-                        else []
+
+    # Leer asignaciones del mes
+    df_ass = read_df("""
+        select a.work_date, a.shift_type_id, e.full_name
+        from shift_assignments a
+        join employees e on e.id=a.employee_id
+        where a.active=true and a.work_date >= :s and a.work_date < :e
+        order by a.work_date, a.shift_type_id, e.full_name
+    """, {"s": str(start), "e": str(end)})
+
+    assigned_map = {}
+    if not df_ass.empty:
+        for (wd, sid), g in df_ass.groupby(["work_date", "shift_type_id"]):
+            assigned_map[(str(wd), str(sid))] = g["full_name"].tolist()
+
+    def short_label(names, req):
+        count = len(names)
+        short = []
+        for n in names[:2]:
+            clean = n.strip().replace(",", " ").split()
+            first = clean[0].capitalize() if clean else ""
+            if first: short.append(first)
+        label = ", ".join(short) if short else "—"
+        if count > 2: label += f" +{count-2}"
+        if count >= req:   color = "green"
+        elif count == req-1: color = "orange"
+        else:              color = "red"
+        return label, color
+
+    # Cabecera días de semana
+    st.markdown("""
+    <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:4px">
+      <div style="text-align:center;font-size:0.7rem;font-weight:700;color:#7A8C7C;letter-spacing:0.06em">LUN</div>
+      <div style="text-align:center;font-size:0.7rem;font-weight:700;color:#7A8C7C;letter-spacing:0.06em">MAR</div>
+      <div style="text-align:center;font-size:0.7rem;font-weight:700;color:#7A8C7C;letter-spacing:0.06em">MIÉ</div>
+      <div style="text-align:center;font-size:0.7rem;font-weight:700;color:#7A8C7C;letter-spacing:0.06em">JUE</div>
+      <div style="text-align:center;font-size:0.7rem;font-weight:700;color:#7A8C7C;letter-spacing:0.06em">VIE</div>
+      <div style="text-align:center;font-size:0.7rem;font-weight:700;color:#b0a898;letter-spacing:0.06em">SÁB</div>
+      <div style="text-align:center;font-size:0.7rem;font-weight:700;color:#b0a898;letter-spacing:0.06em">DOM</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Construir semanas
+    first_dow = start.isoweekday()  # 1=Lun..7=Dom
+    # Rellenar con None antes del primer día
+    all_days = [None] * (first_dow - 1)
+    d = start
+    while d < end:
+        all_days.append(d)
+        d += timedelta(days=1)
+    # Rellenar hasta completar última semana
+    while len(all_days) % 7 != 0:
+        all_days.append(None)
+
+    today = date.today()
+    selected_date = st.session_state.get("selected_work_date")
+    selected_shift = st.session_state.get("selected_shift_id")
+
+    # Renderizar por semanas (filas de 7)
+    for week_start in range(0, len(all_days), 7):
+        week = all_days[week_start:week_start+7]
+        cols = st.columns(7, gap="small")
+        for col_i, day in enumerate(week):
+            with cols[col_i]:
+                if day is None:
+                    st.markdown("<div style='min-height:70px'></div>", unsafe_allow_html=True)
+                    continue
+
+                iso = day.isoformat()
+                is_today = (day == today)
+                border = "2px solid #2D5A35" if is_today else "1px solid #E8E5DE"
+                bg = "#F0F7F1" if is_today else "#fff"
+
+                st.markdown(
+                    f"<div style='background:{bg};border:{border};border-radius:6px;"
+                    f"padding:4px 4px 2px 4px;min-height:70px'>",
+                    unsafe_allow_html=True
+                )
+                st.markdown(
+                    f"<div style='text-align:right;font-size:0.65rem;font-weight:700;"
+                    f"color:{'#2D5A35' if is_today else '#4A5C4C'};margin-bottom:2px'>{day.day}</div>",
+                    unsafe_allow_html=True
+                )
+
+                for sh in shifts.itertuples(index=False):
+                    sh_id = str(sh.id)
+                    names = assigned_map.get((iso, sh_id), [])
+                    req = int(sh.required_staff)
+                    nm = str(sh.name).lower()
+                    code = "M" if "mañ" in nm else ("T" if "tar" in nm else str(sh.code))
+                    label, color_name = short_label(names, req)
+
+                    colors = {"green": ("#27ae60","#fff"),
+                              "orange": ("#e67e22","#fff"),
+                              "red": ("#e74c3c","#fff")}
+                    bg_c, fg_c = colors[color_name]
+
+                    is_selected = (selected_date == iso and selected_shift == sh_id)
+                    outline = "outline:2px solid #1C2B1E;outline-offset:1px;" if is_selected else ""
+
+                    btn_key = f"cal_{iso}_{sh_id}"
+                    st.markdown(
+                        f"<div style='background:{bg_c};color:{fg_c};border-radius:3px;"
+                        f"padding:1px 4px;font-size:0.58rem;font-weight:600;"
+                        f"margin-bottom:2px;cursor:pointer;{outline}'>"
+                        f"{code}: {label}</div>",
+                        unsafe_allow_html=True
                     )
- 
-                    selected = st.multiselect(
-                        "Asignar personas (quedarán ACTIVAS)",
-                        options=avail_names,
-                        default=[n for n in assigned_active if n in avail_map],
-                        key=f"ms_{work_date_str}_{shift_id}",
-                    )
- 
-                    if st.button("💾 Guardar asignación", type="primary", key=f"save_{work_date_str}_{shift_id}"):
-                        selected_ids = [avail_map[n] for n in selected]
-                        apply_assignments(work_date, dow, str(shift_id), selected_ids)
-                        st.success("Guardado.")
+                    if st.button(f"{code} {day.day}", key=btn_key, use_container_width=True):
+                        st.session_state["selected_work_date"] = iso
+                        st.session_state["selected_shift_id"] = sh_id
                         st.rerun()
- 
-                    st.divider()
-                    st.caption("Asignaciones existentes (activar/desactivar):")
-                    if assigned.empty:
-                        st.info("No hay asignaciones todavía.")
-                    else:
-                        for r in assigned.itertuples(index=False):
-                            k = f"act_{r.assignment_id}"
-                            new_act = st.checkbox(r.full_name, value=bool(r.active), key=k)
-                            if new_act != bool(r.active):
-                                set_assignment_active(r.assignment_id, new_act)
-                                st.toast("Actualizado ✅")
-                                st.rerun()
- 
-                    st.divider()
-                    with st.expander("🛠️ Disponibilidad puntual (override)", expanded=False):
-                        st.caption("Solo este día y este turno.")
- 
-                        df_eff = get_effective_availability_all(work_date, dow, str(shift_id))
-                        reason = st.text_input("Motivo (opcional)", value="", key=f"ov_reason_{work_date_str}_{shift_id}")
- 
-                        for r in df_eff.itertuples(index=False):
-                            if r.is_time_off:
-                                st.checkbox(
-                                    f"{r.full_name} (vacaciones)",
-                                    value=False,
-                                    key=f"ov_{r.id}_{work_date_str}_{shift_id}",
-                                    disabled=True
-                                )
-                                continue
- 
-                            new_av = st.checkbox(
-                                r.full_name,
-                                value=bool(r.is_available),
-                                key=f"ov_{r.id}_{work_date_str}_{shift_id}"
-                            )
-                            if new_av != bool(r.is_available):
-                                upsert_override(
-                                    emp_id=str(r.id),
-                                    work_date=work_date,
-                                    shift_id=str(shift_id),
-                                    available=new_av,
-                                    reason=reason
-                                )
-                                st.toast("Override guardado ✅")
-                                st.rerun()
- 
+
+                st.markdown("</div>", unsafe_allow_html=True)
+
+    st.divider()
+    st.markdown("### Editor del turno")
+
+    if "selected_work_date" not in st.session_state or "selected_shift_id" not in st.session_state:
+        st.info("Pulsa el botón de un turno en el calendario para editarlo aquí.")
+    else:
+        if st.button("❌ Cerrar editor", key="close_editor"):
+            st.session_state.pop("selected_work_date", None)
+            st.session_state.pop("selected_shift_id", None)
+            st.rerun()
+
+        work_date_str = st.session_state["selected_work_date"]
+        shift_id = st.session_state["selected_shift_id"]
+        work_date = date.fromisoformat(work_date_str)
+        dow = int(work_date.isoweekday())
+
+        match = shifts[shifts["id"].astype(str) == str(shift_id)]
+        if match.empty:
+            st.error("No pude identificar el turno seleccionado.")
+        else:
+            sh_row = match.iloc[0]
+            req = int(sh_row["required_staff"])
+
+            c_info1, c_info2, c_info3 = st.columns(3)
+            c_info1.metric("Fecha", work_date_str)
+            c_info2.metric("Turno", sh_row["name"])
+            c_info3.metric("Necesarias", req)
+
+            avail = available_employees_for_date_shift(work_date, dow, str(shift_id))
+            if avail.empty:
+                st.warning("Nadie disponible según disponibilidad/vacaciones.")
+            else:
+                avail_names = avail["full_name"].tolist()
+                avail_map = dict(zip(avail_names, avail["id"].tolist()))
+
+                assigned = get_assignments(work_date, str(shift_id))
+                assigned_active = (
+                    assigned[assigned["active"] == True]["full_name"].tolist()
+                    if not assigned.empty else []
+                )
+
+                selected = st.multiselect(
+                    "Asignar personas (quedarán ACTIVAS)",
+                    options=avail_names,
+                    default=[n for n in assigned_active if n in avail_map],
+                    key=f"ms_{work_date_str}_{shift_id}",
+                )
+
+                if st.button("💾 Guardar asignación", type="primary", key=f"save_{work_date_str}_{shift_id}"):
+                    selected_ids = [avail_map[n] for n in selected]
+                    apply_assignments(work_date, dow, str(shift_id), selected_ids)
+                    st.success("Guardado.")
+                    st.rerun()
+
+                st.divider()
+                st.caption("Asignaciones existentes (activar/desactivar):")
+                if assigned.empty:
+                    st.info("No hay asignaciones todavía.")
+                else:
+                    for r in assigned.itertuples(index=False):
+                        k = f"act_{r.assignment_id}"
+                        new_act = st.checkbox(r.full_name, value=bool(r.active), key=k)
+                        if new_act != bool(r.active):
+                            set_assignment_active(r.assignment_id, new_act)
+                            st.toast("Actualizado ✅")
+                            st.rerun()
+
+                st.divider()
+                with st.expander("🛠️ Disponibilidad puntual (override)", expanded=False):
+                    st.caption("Solo este día y este turno.")
+                    df_eff = get_effective_availability_all(work_date, dow, str(shift_id))
+                    reason = st.text_input("Motivo (opcional)", value="", key=f"ov_reason_{work_date_str}_{shift_id}")
+                    for r in df_eff.itertuples(index=False):
+                        if r.is_time_off:
+                            st.checkbox(f"{r.full_name} (vacaciones)", value=False,
+                                key=f"ov_{r.id}_{work_date_str}_{shift_id}", disabled=True)
+                            continue
+                        new_av = st.checkbox(r.full_name, value=bool(r.is_available),
+                            key=f"ov_{r.id}_{work_date_str}_{shift_id}")
+                        if new_av != bool(r.is_available):
+                            upsert_override(emp_id=str(r.id), work_date=work_date,
+                                shift_id=str(shift_id), available=new_av, reason=reason)
+                            st.toast("Override guardado ✅")
+                            st.rerun()
+
 # ===================== TAB 3: DASHBOARD =====================
 with tab3:
     st.subheader("Dashboard")
     st.caption("Horas y cobertura según asignaciones activas en el rango seleccionado.")
- 
+
     c1, c2, c3 = st.columns([1, 1, 2])
     with c1:
         dash_start = st.date_input("Inicio", value=date.today().replace(day=1), key="dash_start")
@@ -994,17 +932,17 @@ with tab3:
         dash_end = st.date_input("Fin", value=date.today(), key="dash_end")
     with c3:
         st.info("El rango incluye Inicio y Fin.")
- 
+
     if dash_end < dash_start:
         st.error("La fecha 'Fin' no puede ser anterior a 'Inicio'.")
     else:
         # --- ALERTAS DE COBERTURA ---
         st.markdown("### 🚨 Alertas de cobertura")
         st.caption("Turnos con personal insuficiente respecto al mínimo requerido.")
- 
+
         try:
             shifts_dash = get_active_shifts()
- 
+
             if shifts_dash.empty:
                 st.warning("No hay turnos activos configurados.")
             else:
@@ -1020,7 +958,7 @@ with tab3:
                       and a.work_date <= :e
                     group by a.work_date, a.shift_type_id
                 """, {"s": str(dash_start), "e": str(dash_end)})
- 
+
                 # Construir tabla completa días × turnos
                 coverage_rows = []
                 cur = dash_start
@@ -1046,10 +984,10 @@ with tab3:
                             "deficit":    max(0, req - assigned_count),
                         })
                     cur += timedelta(days=1)
- 
+
                 df_cov_full = pd.DataFrame(coverage_rows)
                 total_slots = len(df_cov_full)
- 
+
                 if total_slots == 0:
                     st.info("No hay datos de turnos para este rango.")
                 else:
@@ -1057,13 +995,13 @@ with tab3:
                     parciales = int(((df_cov_full["deficit"] > 0) & (df_cov_full["asignadas"] > 0)).sum())
                     vacios    = int((df_cov_full["asignadas"] == 0).sum())
                     pct_ok    = round(cubiertos / total_slots * 100)
- 
+
                     m1, m2, m3, m4 = st.columns(4)
                     m1.metric("✅ Cubiertos",       cubiertos, f"{pct_ok}%")
                     m2.metric("🟡 Parciales",        parciales)
                     m3.metric("🔴 Sin asignar",      vacios)
                     m4.metric("📋 Total turnos",     total_slots)
- 
+
                     df_prob = df_cov_full[df_cov_full["deficit"] > 0].copy()
                     if df_prob.empty:
                         st.success("🎉 ¡Cobertura completa en todo el rango!")
@@ -1076,7 +1014,7 @@ with tab3:
                         df_prob["Fecha"] = pd.to_datetime(
                             df_prob["fecha"].apply(str), format="%Y-%m-%d"
                         ).dt.strftime("%d/%m/%Y (%a)")
- 
+
                         st.dataframe(
                             df_prob[["Fecha","turno","requeridas","asignadas","deficit","estado"]]
                             .rename(columns={
@@ -1089,7 +1027,7 @@ with tab3:
                             use_container_width=True,
                             hide_index=True,
                         )
- 
+
                         st.markdown("#### Déficit acumulado por turno")
                         df_by_shift = (
                             df_prob.groupby("turno", as_index=False)
@@ -1105,12 +1043,12 @@ with tab3:
                             .sort_values("Personas faltantes (total)", ascending=False)
                         )
                         st.dataframe(df_by_shift, use_container_width=True, hide_index=True)
- 
+
         except Exception as e:
             st.error(f"Error en alertas de cobertura: {e}")
- 
+
         st.divider()
- 
+
         # --- HORAS POR PERSONA ---
         try:
             df_h = read_df("""
@@ -1128,7 +1066,7 @@ with tab3:
                   and a.work_date <= :e
                 order by e.full_name, a.work_date, st.start_time
             """, {"s": str(dash_start), "e": str(dash_end)})
- 
+
             if df_h.empty:
                 st.info("No hay asignaciones activas en ese rango.")
             else:
@@ -1142,27 +1080,26 @@ with tab3:
                         return int(t.total_seconds())
                     except Exception:
                         return 0
- 
+
                 df_h["_s"] = df_h["start_time"].apply(parse_time)
                 df_h["_e"] = df_h["end_time"].apply(parse_time)
                 df_h["hours"] = (df_h["_e"] - df_h["_s"]) / 3600.0
- 
+
                 resumen = (
                     df_h.groupby("full_name", as_index=False)
                     .agg(turnos=("turno", "count"), horas=("hours", "sum"))
                     .sort_values("horas", ascending=False)
                 )
- 
+
                 st.markdown("### Horas por persona")
                 st.dataframe(resumen, use_container_width=True, hide_index=True)
- 
+
                 st.markdown("### Detalle")
                 st.dataframe(
                     df_h[["work_date", "turno", "full_name", "hours"]],
                     use_container_width=True,
                     hide_index=True,
                 )
- 
+
         except Exception as e:
             st.error(f"Error calculando horas: {e}")
- 
